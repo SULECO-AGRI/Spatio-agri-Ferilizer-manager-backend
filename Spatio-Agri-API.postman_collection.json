@@ -1,0 +1,330 @@
+{
+  "info": {
+    "_postman_id": "8f3e9b12-5a4c-4e89-b7d1-2c938f71a001",
+    "name": "Spatio-Agri Precision Fertilizer Manager API",
+    "description": "Comprehensive Postman collection for testing the Spatio-Agri Precision Fertilizer Management Backend API, including Health Checks, Farmer & Pilot Registration, Role-Verified Login, and Authenticated User Profiles.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health Checks",
+      "item": [
+        {
+          "name": "Server Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Checks if the Express application server is up and responsive."
+          },
+          "response": []
+        },
+        {
+          "name": "Database Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/db",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "db"]
+            },
+            "description": "Executes a SELECT 1 query to verify active PostgreSQL database connectivity."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication & Authorization",
+      "item": [
+        {
+          "name": "Register Farmer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.token) {",
+                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+                  "        console.log(\"Saved farmer token to collection variables.\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"farmer.sunil@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Sunil\",\n  \"lastName\": \"Perera\",\n  \"mobile\": \"0712345678\",\n  \"nic\": \"199012345678\",\n  \"address\": \"123 Green Valley, Anuradhapura\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register/farmer",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register", "farmer"]
+            },
+            "description": "Registers a new Farmer account with role 'Farmer' and 1:1 FarmerProfile."
+          },
+          "response": []
+        },
+        {
+          "name": "Register Pilot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.token) {",
+                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+                  "        console.log(\"Saved pilot token to collection variables.\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pilot.kasun@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Kasun\",\n  \"lastName\": \"Silva\",\n  \"mobile\": \"0771234567\",\n  \"licenceNumber\": \"CAA-UAV-88412\",\n  \"totalFlightHours\": 45.5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register/pilot",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register", "pilot"]
+            },
+            "description": "Registers a new Pilot account with role 'Pilot' and 1:1 PilotProfile."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.token) {",
+                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+                  "        console.log(\"Saved Admin token to collection variables.\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@fertilizer.com\",\n  \"password\": \"Admin@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Logs in the default Super Admin user and saves JWT token to collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (Farmer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.token) {",
+                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+                  "        console.log(\"Saved Farmer token to collection variables.\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"farmer.kamal@fertilizer.com\",\n  \"password\": \"Farmer@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Logs in as a seeded/registered Farmer and embeds FarmerProfile."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (Pilot)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.token) {",
+                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+                  "        console.log(\"Saved Pilot token to collection variables.\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pilot.nimal@fertilizer.com\",\n  \"password\": \"Pilot@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Logs in as a seeded/registered Pilot and embeds PilotProfile."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User Profile (/auth/me)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Fetches current authenticated user information and associated profile data using Bearer JWT token."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Invalid Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@fertilizer.com\",\n  \"password\": \"WrongPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Negative test expecting HTTP 401 Unauthorized."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Short Password (<8 chars)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"123\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"mobile\": \"0710000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register/farmer",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register", "farmer"]
+            },
+            "description": "Negative test expecting HTTP 400 Bad Request due to password length validation."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
