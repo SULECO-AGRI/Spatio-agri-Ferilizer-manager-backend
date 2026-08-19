@@ -1,7 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// ==============================================================================
+// SPATIO-AGRI PRECISION FERTILIZER MANAGEMENT SYSTEM (SULECO AGRI)
+// PRODUCTION DATABASE SCHEMA
+// Architecture: Precision Agriculture & Drone Fleet Management System
+// Database: PostgreSQL
+// ==============================================================================
 
 generator client {
   provider     = "prisma-client"
@@ -13,19 +15,332 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  password  String
-  role      Role     @relation(fields: [roleId], references: [id])
-  roleId    Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ==============================================================================
+// ENUMS & DOMAIN CONSTANTS
+// ==============================================================================
+
+enum PilotStatus {
+  ACTIVE
+  INACTIVE
+  ON_MISSION
+  SUSPENDED
 }
 
+enum ServiceType {
+  FERTILIZING
+}
+
+enum RequestPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RequestStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum MissionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  SETTLED
+  FAILED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CARD_GATEWAY
+  ONLINE_QR
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PayoutSettlementStatus {
+  UNSETTLED
+  QUEUED
+  SETTLED
+}
+
+// ==============================================================================
+// 1. IDENTITY & USER PROFILES (IAM & PROFILE SUBTYPES)
+// ==============================================================================
+
 model Role {
-  id    Int    @id @default(autoincrement())
-  name  String @unique
+  roleId Int    @id @default(autoincrement()) @map("role_id")
+  name   String @unique @db.VarChar(20) @map("name")
+
+  // Relations
   users User[]
+
+  @@map("roles")
+}
+
+model User {
+  userId    Int      @id @default(autoincrement()) @map("user_id")
+  email     String   @unique @db.VarChar(255) @map("email")
+  password  String   @db.VarChar(255) @map("password")
+  firstName String   @db.VarChar(50) @map("first_name")
+  lastName  String   @db.VarChar(50) @map("last_name")
+  mobile    String   @unique @db.VarChar(15) @map("mobile")
+  roleId    Int      @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  role             Role          @relation(fields: [roleId], references: [roleId], onDelete: Restrict)
+  farmerProfile    FarmerProfile?
+  adminProfile     AdminProfile?
+  pilotProfile     PilotProfile?
+  activityLogs     ActivityLog[]
+  assignedMissions Mission[]     @relation("MissionAssignedBy")
+
+  @@index([email])
+  @@index([mobile])
+  @@index([roleId])
+  @@map("users")
+}
+
+model FarmerProfile {
+  userId      Int      @id @map("user_id")
+  nic         String?  @unique @db.VarChar(20) @map("nic")
+  address     String?  @db.Text @map("address")
+  memberSince DateTime @default(now()) @db.Date @map("member_since")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  fields  Field[]
+  reviews Review[]
+
+  @@index([nic])
+  @@map("farmer_profiles")
+}
+
+model AdminProfile {
+  userId      Int      @id @map("user_id")
+  department  String?  @db.VarChar(50) @map("department")
+  accessLevel String?  @db.VarChar(50) @map("access_level")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("admin_profiles")
+}
+
+model PilotProfile {
+  userId            Int         @id @map("user_id")
+  licenceNumber     String      @unique @db.VarChar(50) @map("licence_number")
+  status            PilotStatus @default(ACTIVE) @map("status")
+  ratings           Decimal?    @default(5.00) @db.Decimal(3, 2) @map("ratings")
+  completedMissions Int         @default(0) @map("completed_missions")
+  totalFlightHours  Decimal     @default(0.00) @db.Decimal(8, 2) @map("total_flight_hours")
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  missions Mission[]
+  reviews  Review[]
+  payouts  Payout[]
+
+  @@index([status])
+  @@index([licenceNumber])
+  @@map("pilot_profiles")
+}
+
+// ==============================================================================
+// 2. FIELDS
+// ==============================================================================
+
+model Field {
+  id                  Int      @id @default(autoincrement()) @map("id")
+  farmerId            Int      @map("farmer_id")
+  fieldName           String   @db.VarChar(255) @map("field_name")
+  cropType            String   @db.VarChar(50) @map("crop_type")
+  locationCoordinates Json     @map("location_coordinates")
+  area                Decimal  @db.Decimal(8, 2) @map("area")
+  province            String   @db.VarChar(50) @map("province")
+  district            String   @db.VarChar(50) @map("district")
+  city                String   @db.VarChar(50) @map("city")
+  village             String   @db.VarChar(50) @map("village")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  farmer          FarmerProfile    @relation(fields: [farmerId], references: [userId], onDelete: Cascade)
+  serviceRequests ServiceRequest[]
+
+  @@index([farmerId])
+  @@index([district, province])
+  @@map("fields")
+}
+
+// ==============================================================================
+// 3. SERVICE REQUESTS & MISSION
+// ==============================================================================
+
+model ServiceRequest {
+  requestId     Int             @id @default(autoincrement()) @map("request_id")
+  requestCode   String          @unique @db.VarChar(20) @map("request_code")
+  fieldId       Int             @map("field_id")
+  serviceType   ServiceType     @map("service_type")
+  preferredDate DateTime        @db.Date @map("preferred_date")
+  priority      RequestPriority @default(MEDIUM) @map("priority")
+  status        RequestStatus   @default(PENDING) @map("status")
+  estimatedCost Decimal         @db.Decimal(10, 2) @map("estimated_cost")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  field    Field     @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+  missions Mission[]
+
+  @@index([fieldId])
+  @@index([status])
+  @@index([preferredDate])
+  @@index([priority])
+  @@map("service_requests")
+}
+
+model Mission {
+  missionId   Int           @id @default(autoincrement()) @map("mission_id")
+  requestId   Int           @map("request_id")
+  pilotId     Int?          @map("pilot_id")
+  assignedBy  Int?          @map("assigned_by")
+  startedAt   DateTime?     @map("started_at")
+  completedAt DateTime?     @map("completed_at")
+  status      MissionStatus @default(SCHEDULED) @map("status")
+  areaSpread  Decimal?      @db.Decimal(8, 2) @map("area_spread")
+  pilotNotes  String?       @db.Text @map("pilot_notes")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  serviceRequest ServiceRequest @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
+  pilot          PilotProfile?  @relation(fields: [pilotId], references: [userId], onDelete: SetNull)
+  assignedByUser User?          @relation("MissionAssignedBy", fields: [assignedBy], references: [userId], onDelete: SetNull)
+  review         Review?
+  payment        Payment?
+
+  @@index([requestId])
+  @@index([pilotId])
+  @@index([assignedBy])
+  @@index([status])
+  @@index([startedAt])
+  @@map("missions")
+}
+
+// ==============================================================================
+// 4. REVIEWS & FEEDBACK
+// ==============================================================================
+
+model Review {
+  reviewId  Int      @id @default(autoincrement()) @map("review_id")
+  missionId Int      @unique @map("mission_id")
+  pilotId   Int      @map("pilot_id")
+  farmerId  Int      @map("farmer_id")
+  rating    Int      @map("rating")
+  comment   String?  @db.Text @map("comment")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  mission Mission       @relation(fields: [missionId], references: [missionId], onDelete: Cascade)
+  pilot   PilotProfile  @relation(fields: [pilotId], references: [userId], onDelete: Restrict)
+  farmer  FarmerProfile @relation(fields: [farmerId], references: [userId], onDelete: Restrict)
+
+  @@index([pilotId])
+  @@index([farmerId])
+  @@map("reviews")
+}
+
+// ==============================================================================
+// 5. PAYOUTS & PAYMENTS (FINANCIAL LEDGER)
+// ==============================================================================
+
+model Payout {
+  payoutId       Int          @id @default(autoincrement()) @map("payout_id")
+  pilotId        Int          @map("pilot_id")
+  periodStart    DateTime     @db.Date @map("period_start")
+  periodEnd      DateTime     @db.Date @map("period_end")
+  amount         Decimal      @db.Decimal(10, 2) @map("amount")
+  bankName       String       @db.VarChar(150) @map("bank_name")
+  bankAccountNo  String       @db.VarChar(50) @map("bank_account_no")
+  transactionRef String?      @unique @db.VarChar(100) @map("transaction_ref")
+  status         PayoutStatus @default(PENDING) @map("status")
+  settledAt      DateTime?    @map("settled_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  pilot    PilotProfile @relation(fields: [pilotId], references: [userId], onDelete: Restrict)
+  payments Payment[]
+
+  @@index([pilotId])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+  @@map("payouts")
+}
+
+model Payment {
+  paymentId            Int                    @id @default(autoincrement()) @map("payment_id")
+  missionId            Int                    @unique @map("mission_id")
+  totalAmount          Decimal                @db.Decimal(10, 2) @map("total_amount")
+  companyCommission    Decimal                @db.Decimal(10, 2) @map("company_commission")
+  pilotEarnings        Decimal                @db.Decimal(10, 2) @map("pilot_earnings")
+  paymentMethod        PaymentMethod          @map("payment_method")
+  paymentStatus        PaymentStatus          @default(PENDING) @map("payment_status")
+  payoutId             Int?                   @map("payout_id")
+  payoutStatus         PayoutSettlementStatus @default(UNSETTLED) @map("payout_status")
+  transactionReference String?                @unique @db.VarChar(100) @map("transaction_reference")
+  paidAt               DateTime?              @map("paid_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  mission Mission @relation(fields: [missionId], references: [missionId], onDelete: Restrict)
+  payout  Payout? @relation(fields: [payoutId], references: [payoutId], onDelete: SetNull)
+
+  @@index([payoutId])
+  @@index([paymentStatus])
+  @@index([payoutStatus])
+  @@map("payments")
+}
+
+// ==============================================================================
+// 6. ACTIVITY STREAM & AUDIT TRAIL
+// ==============================================================================
+
+model ActivityLog {
+  logId      Int      @id @default(autoincrement()) @map("log_id")
+  userId     Int?     @map("user_id")
+  action     String   @db.VarChar(50) @map("action")
+  entityType String   @db.VarChar(50) @map("entity_type")
+  entityId   String?  @db.VarChar(50) @map("entity_id")
+  details    String   @db.Text @map("details")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@map("activity_logs")
 }
