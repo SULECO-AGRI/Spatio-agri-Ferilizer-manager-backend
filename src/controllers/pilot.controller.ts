@@ -1,0 +1,181 @@
+import { Request, Response } from "express";
+import { PilotService } from "../services/pilot.service";
+import { asyncHandler } from "../utils/asyncHandler";
+
+export class PilotController {
+  /**
+   * GET /pilots
+   * Retrieve paginated set of pilots with search, status filters, and sorting (Admin Only)
+   */
+  public static getAllPilots = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const result = await PilotService.getAllPilots(req.query as any);
+
+      res.status(200).json({
+        status: "success",
+        data: {
+          pilots: result.items,
+          pagination: result.pagination,
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /pilots/:id
+   * Retrieve single pilot comprehensive profile, analytics, and stats
+   */
+  public static getPilotById = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const pilot = await PilotService.getPilotById(pilotId, req.user);
+
+      res.status(200).json({
+        status: "success",
+        data: {
+          pilot,
+        },
+      });
+    }
+  );
+
+  /**
+   * PATCH /pilots/:id/status
+   * Update pilot availability / duty status
+   */
+  public static updatePilotStatus = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const { status } = req.body;
+
+      const updated = await PilotService.updatePilotStatus(
+        pilotId,
+        status,
+        req.user
+      );
+
+      res.status(200).json({
+        status: "success",
+        message: "Pilot status updated successfully.",
+        data: updated,
+      });
+    }
+  );
+
+  /**
+   * GET /pilots/:id/missions
+   * Retrieve pilot's mission assignments and historical flights
+   */
+  public static getPilotMissions = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const result = await PilotService.getPilotMissions(
+        pilotId,
+        req.query as any,
+        req.user
+      );
+
+      res.status(200).json({
+        status: "success",
+        data: {
+          missions: result.items,
+          pagination: result.pagination,
+        },
+      });
+    }
+  );
+
+  /**
+   * PATCH /pilots/:id/missions/:missionId/start
+   * Start a scheduled mission (transitions mission to IN_PROGRESS, pilot to ON_MISSION)
+   */
+  public static startMission = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const missionId = Number(req.params.missionId);
+
+      const result = await PilotService.startMission(
+        pilotId,
+        missionId,
+        req.user
+      );
+
+      res.status(200).json({
+        status: "success",
+        message: "Mission started successfully.",
+        data: result,
+      });
+    }
+  );
+
+  /**
+   * PATCH /pilots/:id/missions/:missionId/complete
+   * Complete a mission atomically (records flight hours, area spread, restores pilot status)
+   */
+  public static completeMission = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const missionId = Number(req.params.missionId);
+
+      const result = await PilotService.completeMission(
+        pilotId,
+        missionId,
+        req.body,
+        req.user
+      );
+
+      res.status(200).json({
+        status: "success",
+        message: "Mission completed successfully.",
+        data: result,
+      });
+    }
+  );
+
+  /**
+   * GET /pilots/:id/payouts
+   * Retrieve financial payout records and settlement ledger
+   */
+  public static getPilotPayouts = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const result = await PilotService.getPilotPayouts(
+        pilotId,
+        req.query as any,
+        req.user
+      );
+
+      res.status(200).json({
+        status: "success",
+        data: {
+          payouts: result.payouts,
+          summary: result.summary,
+          pagination: result.pagination,
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /pilots/:id/reviews
+   * Retrieve customer performance reviews and ratings for the pilot
+   */
+  public static getPilotReviews = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const result = await PilotService.getPilotReviews(
+        pilotId,
+        req.query as any,
+        req.user
+      );
+
+      res.status(200).json({
+        status: "success",
+        data: {
+          reviews: result.items,
+          pagination: result.pagination,
+        },
+      });
+    }
+  );
+}

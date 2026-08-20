@@ -542,6 +542,321 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "4. Pilot Management & Operations",
+      "item": [
+        {
+          "name": "Get All Pilots (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots"]
+            },
+            "description": "Retrieves a paginated list of all registered drone pilots with status, ratings, total flight hours, and completed missions count. Admin only."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Pilots with Filter & Pagination",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots?page=1&limit=10&status=ACTIVE&sortBy=ratings&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "ratings"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Filters pilots by availability status and sorts by rating, completed missions, or total flight hours."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Pilot Profile by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2"]
+            },
+            "description": "Fetches complete profile, licensing info, active & completed mission counters, total earnings, and pending payouts."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Pilot Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2", "status"]
+            },
+            "description": "Updates pilot duty availability status (ACTIVE, INACTIVE, ON_MISSION, SUSPENDED)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pilot Missions History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2/missions?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2", "missions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Retrieves historical and upcoming mission assignments with farm, field geo-coordinates, crop details, and farmer contact info."
+          },
+          "response": []
+        },
+        {
+          "name": "Start Mission",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2/missions/1/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2", "missions", "1", "start"]
+            },
+            "description": "Transitions mission to IN_PROGRESS, sets startedAt timestamp, and marks pilot ON_MISSION in an atomic transaction."
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Mission",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"areaSpread\": 4.5,\n  \"flightDurationHours\": 1.25,\n  \"pilotNotes\": \"Precision fertilizer application completed with 100% boundary coverage.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2/missions/1/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2", "missions", "1", "complete"]
+            },
+            "description": "Atomically completes mission, logs area spread and pilot notes, increments completed missions, adds flight hours, and restores pilot ACTIVE status."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pilot Payouts",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2/payouts?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2", "payouts"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Retrieves payout settlement ledger and earnings history for the pilot."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pilot Reviews",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/2/reviews?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "2", "reviews"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Retrieves customer reviews, mission ratings, and feedback for the pilot."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Non-Existent Pilot ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "999999"]
+            },
+            "description": "Negative test expecting HTTP 404 Not Found for non-existent pilot ID."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [

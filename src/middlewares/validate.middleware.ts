@@ -12,7 +12,12 @@ export const validate = (schema: ZodSchema, location: RequestLocation = "body") 
   return (req: Request, _res: Response, next: NextFunction): void => {
     try {
       const parsedData = schema.parse(req[location]);
-      req[location] = parsedData;
+      Object.defineProperty(req, location, {
+        value: parsedData,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
       next();
     } catch (error: any) {
       if (error instanceof ZodError || error?.name === "ZodError") {
