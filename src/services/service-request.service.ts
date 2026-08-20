@@ -11,6 +11,7 @@ import {
 import { PaginationMeta } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
+import { logActivity } from "../utils/activityLogger";
 import {
   RequestStatus,
   RequestPriority,
@@ -101,6 +102,15 @@ export class ServiceRequestService {
     });
 
     const farmerUser = newRequest.field.farmer.user;
+
+    // Log persistent audit trail
+    logActivity({
+      userId: farmerUserId,
+      action: "REQUEST_CREATED",
+      entityType: "SERVICE_REQUEST",
+      entityId: newRequest.requestId,
+      details: `Service request ${newRequest.requestCode} created for ${newRequest.field.fieldName} (${newRequest.field.cropType}).`,
+    });
 
     return {
       requestId: newRequest.requestId,
@@ -620,6 +630,14 @@ export class ServiceRequestService {
       });
     });
 
+    logActivity({
+      userId: adminUserId,
+      action: "PILOT_ASSIGNED",
+      entityType: "SERVICE_REQUEST",
+      entityId: requestId,
+      details: `Pilot ${pilot.firstName} ${pilot.lastName} (${pilot.pilotProfile.licenceNumber}) assigned to request ${serviceRequest.requestCode}.`,
+    });
+
     return this.getServiceRequestById(requestId, {
       userId: adminUserId,
       email: "admin@fertilizer.com",
@@ -668,6 +686,14 @@ export class ServiceRequestService {
       data: {
         status: dto.status as RequestStatus,
       },
+    });
+
+    logActivity({
+      userId: requestUser.userId,
+      action: `REQUEST_${dto.status}`,
+      entityType: "SERVICE_REQUEST",
+      entityId: requestId,
+      details: `Service request ${serviceRequest.requestCode} status updated to ${dto.status} by ${requestUser.role}.`,
     });
 
     return this.getServiceRequestById(requestId, requestUser);

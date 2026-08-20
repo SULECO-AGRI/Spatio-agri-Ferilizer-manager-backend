@@ -14,6 +14,7 @@ import {
 import { PaginatedResult, PaginationMeta } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
+import { logActivity } from "../utils/activityLogger";
 import { PilotStatus, MissionStatus, PayoutStatus } from "../generated/prisma/enums";
 
 export class PilotService {
@@ -324,6 +325,14 @@ export class PilotService {
       },
     });
 
+    logActivity({
+      userId: requestUser?.userId || pilotId,
+      action: "PILOT_STATUS_UPDATED",
+      entityType: "PILOT_PROFILE",
+      entityId: pilotId,
+      details: `Pilot status updated to ${status}.`,
+    });
+
     return updated;
   }
 
@@ -546,6 +555,14 @@ export class PilotService {
       return updatedMission;
     });
 
+    logActivity({
+      userId: requestUser?.userId || pilotId,
+      action: "MISSION_STARTED",
+      entityType: "MISSION",
+      entityId: missionId,
+      details: `Mission #${missionId} started for request ${mission.serviceRequest.requestCode}.`,
+    });
+
     return {
       missionId: result.missionId,
       status: result.status,
@@ -636,6 +653,14 @@ export class PilotService {
         updatedMission,
         updatedPilot,
       };
+    });
+
+    logActivity({
+      userId: requestUser?.userId || pilotId,
+      action: "MISSION_COMPLETED",
+      entityType: "MISSION",
+      entityId: missionId,
+      details: `Mission #${missionId} completed for ${mission.serviceRequest.requestCode} with ${dto.areaSpread} acres spread.`,
     });
 
     return {

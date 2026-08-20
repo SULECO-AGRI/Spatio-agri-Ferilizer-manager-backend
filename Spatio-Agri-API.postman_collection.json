@@ -1116,6 +1116,137 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "6. Admin Executive Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Overview (All-in-One)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dashboard"]
+            },
+            "description": "Retrieves aggregated executive dashboard data including KPIs, latest 6 system activities, and today's flight schedule. Admin only."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dashboard Metrics & KPIs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dashboard", "metrics"]
+            },
+            "description": "Retrieves pending requests count, active missions count, available pilots count, today's revenue breakdown, and 90-day mission success rate."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recent Activities Feed",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard/activities?limit=6",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dashboard", "activities"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "6"
+                }
+              ]
+            },
+            "description": "Retrieves the latest 6 operational audit events (requests, missions, payments, reviews) with actors and timestamps."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Today's Flight Schedule",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard/schedule",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dashboard", "schedule"]
+            },
+            "description": "Retrieves all flights and service requests scheduled for today with farmer contact, crop & field geo-coordinates, and assigned pilot details."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Unauthorized Access (Non-Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{farmerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dashboard"]
+            },
+            "description": "Negative test expecting HTTP 403 Forbidden when a non-admin attempts to access admin dashboard."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
