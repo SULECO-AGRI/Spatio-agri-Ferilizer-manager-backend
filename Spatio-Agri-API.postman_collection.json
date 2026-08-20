@@ -313,6 +313,235 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "3. Farmer Management (Admin Only)",
+      "item": [
+        {
+          "name": "Get All Farmers (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers"]
+            },
+            "description": "Retrieves a paginated list of all farmers with aggregated summary metrics (total fields, total area, service requests). Strictly restricted to Admin role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Farmers with Search & Pagination",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers?page=1&limit=10&search=Kamal&sortBy=createdAt&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "search",
+                  "value": "Kamal"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Queries farmers list with case-insensitive search by name, email, mobile, or NIC, along with pagination and sorting."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Farmer Profile by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers/4",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "4"]
+            },
+            "description": "Fetches complete profile details and calculated statistics (total area, total spent, completed requests, rating) for a specific farmer ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Farmer Agricultural Fields",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers/4/fields",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "4", "fields"]
+            },
+            "description": "Fetches all agricultural plots and fields registered by the farmer including geo-coordinates and crop types."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Farmer Service Request History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers/4/services?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "4", "services"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Fetches historical service requests, drone spray missions, pilot assignments, and payment status for the farmer's fields."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Farmer Payment History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers/4/payments?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "4", "payments"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Fetches financial transactions, invoice amounts, payment methods, transaction references, and overall financial summary for the farmer."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Unauthorized (No Token)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers"]
+            },
+            "description": "Negative test expecting HTTP 401 Unauthorized when no Bearer token is supplied."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Non-Existent Farmer ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/farmers/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "999999"]
+            },
+            "description": "Negative test expecting HTTP 404 Not Found for non-existent farmer ID."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
