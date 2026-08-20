@@ -1,0 +1,159 @@
+import { PaginationMeta } from "./farmer.types";
+
+export interface CreateServiceRequestDTO {
+  fieldId: number;
+  serviceType: "FERTILIZING";
+  preferredDate: string; // YYYY-MM-DD
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  estimatedCost?: number;
+}
+
+export interface ServiceRequestQueryDTO {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: "PENDING" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "REJECTED";
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  serviceType?: "FERTILIZING";
+  fieldId?: number;
+  farmerId?: number;
+  startDate?: string;
+  endDate?: string;
+  sortBy?: "createdAt" | "preferredDate" | "priority" | "status" | "estimatedCost";
+  sortOrder?: "asc" | "desc";
+}
+
+export interface AssignPilotDTO {
+  pilotId: number;
+  pilotNotes?: string;
+}
+
+export interface UpdateServiceRequestStatusDTO {
+  status: "PENDING" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "REJECTED";
+}
+
+export interface ServiceRequestListItemDTO {
+  requestId: number;
+  requestCode: string;
+  serviceType: string;
+  preferredDate: Date;
+  priority: string;
+  status: string;
+  estimatedCost: number;
+  farmer: {
+    userId: number;
+    fullName: string;
+    email: string;
+    mobile: string;
+    nic: string | null;
+    address: string | null;
+  };
+  field: {
+    id: number;
+    fieldName: string;
+    cropType: string;
+    area: number;
+    district: string;
+    province: string;
+    city: string;
+    village: string;
+  };
+  assignedPilot: {
+    userId: number;
+    fullName: string;
+    mobile: string;
+    licenceNumber: string;
+    status: string;
+  } | null;
+  mission: {
+    missionId: number;
+    status: string;
+    startedAt: Date | null;
+    completedAt: Date | null;
+  } | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ServiceRequestDetailDTO {
+  requestId: number;
+  requestCode: string;
+  serviceType: string;
+  preferredDate: Date;
+  priority: string;
+  status: string;
+  estimatedCost: number;
+  farmer: {
+    userId: number;
+    fullName: string;
+    email: string;
+    mobile: string;
+    nic: string | null;
+    address: string | null;
+    memberSince: Date | null;
+  };
+  field: {
+    id: number;
+    fieldName: string;
+    cropType: string;
+    area: number;
+    locationCoordinates: any;
+    district: string;
+    province: string;
+    city: string;
+    village: string;
+    createdAt: Date;
+  };
+  missions: {
+    missionId: number;
+    status: string;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    areaSpread: number | null;
+    pilotNotes: string | null;
+    assignedBy: {
+      userId: number;
+      fullName: string;
+      email: string;
+    } | null;
+    pilot: {
+      userId: number;
+      fullName: string;
+      mobile: string;
+      licenceNumber: string;
+      status: string;
+      ratings: number | null;
+    } | null;
+    payment: {
+      paymentId: number;
+      totalAmount: number;
+      companyCommission: number;
+      pilotEarnings: number;
+      paymentStatus: string;
+      paymentMethod: string;
+      payoutStatus: string;
+      paidAt: Date | null;
+    } | null;
+    review: {
+      reviewId: number;
+      rating: number;
+      comment: string | null;
+      createdAt: Date;
+    } | null;
+    createdAt: Date;
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PaginatedServiceRequestsResponseDTO {
+  requests: ServiceRequestListItemDTO[];
+  summary: {
+    totalPending: number;
+    totalAssigned: number;
+    totalInProgress: number;
+    totalCompleted: number;
+    totalCancelled: number;
+  };
+  pagination: PaginationMeta;
+}

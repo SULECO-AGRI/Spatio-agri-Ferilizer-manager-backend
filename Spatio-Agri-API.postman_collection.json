@@ -857,6 +857,265 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "5. Service Requests & Mission Dispatch",
+      "item": [
+        {
+          "name": "Create Service Request (Farmer Only)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldId\": 1,\n  \"serviceType\": \"FERTILIZING\",\n  \"preferredDate\": \"2026-08-25\",\n  \"priority\": \"HIGH\",\n  \"estimatedCost\": 12500.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests"]
+            },
+            "description": "Farmers submit new precision spraying requests for registered fields. Generates unique requestCode and sets status to PENDING."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Service Requests (Admin / Farmer)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests"]
+            },
+            "description": "Retrieves paginated service requests with farmer details, crop info, and assigned pilot summaries. Admins see all; Farmers see own."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Service Requests with Filters & Pagination",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-requests?page=1&limit=10&status=PENDING&priority=HIGH&sortBy=preferredDate&sortOrder=asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "priority",
+                  "value": "HIGH"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "preferredDate"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            },
+            "description": "Filters requests by status and priority, sorted by preferred execution date."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Service Request by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-requests/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests", "1"]
+            },
+            "description": "Fetches detailed service request data including complete farmer profile, field polygon geo-coordinates, scheduled missions, and payments."
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Pilot to Service Request (Admin Only)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pilotId\": 2,\n  \"pilotNotes\": \"Precision fertilizer spraying scheduled for northern paddy sector. Weather clearance verified.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service-requests/1/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests", "1", "assign"]
+            },
+            "description": "Admin assigns a pilot to a service request. Atomically creates/updates a Mission (SCHEDULED) and transitions request status to ASSIGNED."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Service Request Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CANCELLED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service-requests/1/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests", "1", "status"]
+            },
+            "description": "Updates lifecycle status. Farmers may only cancel PENDING requests; Admins have full lifecycle control."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Non-Existent Service Request ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-requests/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests", "999999"]
+            },
+            "description": "Negative test expecting HTTP 404 Not Found for non-existent service request ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Past Preferred Date Validation",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldId\": 1,\n  \"serviceType\": \"FERTILIZING\",\n  \"preferredDate\": \"2020-01-01\",\n  \"priority\": \"LOW\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests"]
+            },
+            "description": "Negative test expecting HTTP 400 Bad Request when submitting a date in the past."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
