@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AdminAnalyticsService } from "../services/admin-analytics.service";
 import { asyncHandler } from "../utils/asyncHandler";
+import { sendSuccess, sendPaginated } from "../utils/response";
 
 export class AdminAnalyticsController {
   /**
@@ -10,11 +11,7 @@ export class AdminAnalyticsController {
   public static getCompletedMissionsAnalytics = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
       const data = await AdminAnalyticsService.getCompletedMissionsAnalytics();
-
-      res.status(200).json({
-        status: "success",
-        data,
-      });
+      sendSuccess(res, data);
     }
   );
 
@@ -25,11 +22,7 @@ export class AdminAnalyticsController {
   public static getRevenueAnalytics = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
       const data = await AdminAnalyticsService.getRevenueAnalytics();
-
-      res.status(200).json({
-        status: "success",
-        data,
-      });
+      sendSuccess(res, data);
     }
   );
 
@@ -40,11 +33,7 @@ export class AdminAnalyticsController {
   public static getPilotFleetPerformance = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
       const data = await AdminAnalyticsService.getPilotFleetPerformance();
-
-      res.status(200).json({
-        status: "success",
-        data,
-      });
+      sendSuccess(res, data);
     }
   );
 
@@ -55,11 +44,7 @@ export class AdminAnalyticsController {
   public static getFarmerGrowth = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
       const data = await AdminAnalyticsService.getFarmerGrowth();
-
-      res.status(200).json({
-        status: "success",
-        data,
-      });
+      sendSuccess(res, data);
     }
   );
 
@@ -72,14 +57,7 @@ export class AdminAnalyticsController {
       const result = await AdminAnalyticsService.getPilotPerformanceTable(
         req.query as any
       );
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          pilots: result.pilots,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(res, "pilots", result.pilots, result.pagination);
     }
   );
 }

@@ -15,6 +15,7 @@ import {
 } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
+import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 
 export class FarmerService {
   /**
@@ -72,9 +73,7 @@ export class FarmerService {
   public static async getAllFarmers(
     query: FarmerQueryDTO
   ): Promise<PaginatedResult<FarmerListItemDTO>> {
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const { search, sortBy = "createdAt", sortOrder = "desc" } = query;
 
@@ -148,8 +147,6 @@ export class FarmerService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
-
     const items: FarmerListItemDTO[] = farmers.map((farmer) => {
       const profile = farmer.farmerProfile;
       const fields = profile?.fields || [];
@@ -166,13 +163,13 @@ export class FarmerService {
       return {
         userId: farmer.userId,
         email: farmer.email,
+        fullName: `${farmer.firstName} ${farmer.lastName}`.trim(),
         firstName: farmer.firstName,
         lastName: farmer.lastName,
-        fullName: `${farmer.firstName} ${farmer.lastName}`.trim(),
         mobile: farmer.mobile,
         nic: profile?.nic || null,
         address: profile?.address || null,
-        memberSince: profile?.memberSince || null,
+        memberSince: profile?.memberSince || farmer.createdAt,
         totalFields,
         totalArea: Number(totalArea.toFixed(2)),
         totalServiceRequests,
@@ -181,14 +178,7 @@ export class FarmerService {
       };
     });
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return { items, pagination };
   }
@@ -385,9 +375,7 @@ export class FarmerService {
     }
     await this.validateFarmerExists(farmerId);
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const whereClause: any = {
       field: {
@@ -510,14 +498,7 @@ export class FarmerService {
       })),
     }));
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return { items, pagination };
   }
@@ -535,9 +516,7 @@ export class FarmerService {
     }
     await this.validateFarmerExists(farmerId);
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const baseWhere: any = {
       mission: {
@@ -663,14 +642,7 @@ export class FarmerService {
       },
     }));
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return {
       payments: items,

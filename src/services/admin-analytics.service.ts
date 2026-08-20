@@ -9,6 +9,7 @@ import {
   PaginatedPilotPerformanceTableResponseDTO,
 } from "../types/admin-analytics.types";
 import { PaginationMeta } from "../types/farmer.types";
+import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import {
   MissionStatus,
   PilotStatus,
@@ -310,9 +311,7 @@ export class AdminAnalyticsService {
   public static async getPilotPerformanceTable(
     query: PilotPerformanceTableQueryDTO
   ): Promise<PaginatedPilotPerformanceTableResponseDTO> {
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const { search, status, sortBy = "completedMissions", sortOrder = "desc" } = query;
 
@@ -433,14 +432,7 @@ export class AdminAnalyticsService {
       };
     });
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return { pilots: items, pagination };
   }

@@ -1,6 +1,7 @@
 import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import routes from "./routes";
 import { notFound } from "./middlewares/notFound";
@@ -8,7 +9,10 @@ import { errorHandler } from "./middlewares/errorHandler";
 
 const app: Application = express();
 
-// 1. Security Headers via Helmet
+// 1. Response Compression (gzip / deflate)
+app.use(compression());
+
+// 2. Security Headers via Helmet
 app.use(helmet());
 
 // 2. Strict Origin-Controlled CORS

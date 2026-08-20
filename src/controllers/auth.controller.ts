@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { AuthService } from "../services/auth.service";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
+import { sendSuccess, sendCreated } from "../utils/response";
 
 export class AuthController {
   /**
@@ -10,11 +11,7 @@ export class AuthController {
   public static registerFarmer = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await AuthService.registerFarmer(req.body);
-      res.status(201).json({
-        status: "success",
-        message: "Farmer registered successfully.",
-        data: result,
-      });
+      sendCreated(res, result, "Farmer registered successfully.");
     }
   );
 
@@ -24,11 +21,7 @@ export class AuthController {
   public static registerPilot = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await AuthService.registerPilot(req.body);
-      res.status(201).json({
-        status: "success",
-        message: "Pilot registered successfully.",
-        data: result,
-      });
+      sendCreated(res, result, "Pilot registered successfully.");
     }
   );
 
@@ -38,11 +31,7 @@ export class AuthController {
   public static login = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await AuthService.login(req.body);
-      res.status(200).json({
-        status: "success",
-        message: "Login successful.",
-        data: result,
-      });
+      sendSuccess(res, result, "Login successful.");
     }
   );
 
@@ -56,10 +45,7 @@ export class AuthController {
       }
 
       const user = await AuthService.getMe(req.user.userId);
-      res.status(200).json({
-        status: "success",
-        data: user,
-      });
+      sendSuccess(res, user);
     }
   );
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AdminService } from "../services/admin.service";
 import { asyncHandler } from "../utils/asyncHandler";
+import { sendSuccess } from "../utils/response";
 
 export class AdminController {
   /**
@@ -10,11 +11,7 @@ export class AdminController {
   public static getDashboardOverview = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
       const data = await AdminService.getDashboardOverview();
-
-      res.status(200).json({
-        status: "success",
-        data,
-      });
+      sendSuccess(res, data);
     }
   );
 
@@ -28,13 +25,7 @@ export class AdminController {
         ? Number(req.query.periodDays)
         : 90;
       const metrics = await AdminService.getMetrics(periodDays);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          metrics,
-        },
-      });
+      sendSuccess(res, { metrics });
     }
   );
 
@@ -46,13 +37,7 @@ export class AdminController {
     async (req: Request, res: Response): Promise<void> => {
       const limit = req.query.limit ? Number(req.query.limit) : 6;
       const activities = await AdminService.getRecentActivities(limit);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          recentActivities: activities,
-        },
-      });
+      sendSuccess(res, { recentActivities: activities });
     }
   );
 
@@ -63,13 +48,7 @@ export class AdminController {
   public static getTodaySchedule = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const todaySchedule = await AdminService.getTodaySchedule(req.query as any);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          todaySchedule,
-        },
-      });
+      sendSuccess(res, { todaySchedule });
     }
   );
 }

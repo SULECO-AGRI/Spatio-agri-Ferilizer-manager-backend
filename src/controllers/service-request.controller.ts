@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ServiceRequestService } from "../services/service-request.service";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
+import { sendSuccess, sendCreated, sendPaginated } from "../utils/response";
 
 export class ServiceRequestController {
   /**
@@ -19,13 +20,11 @@ export class ServiceRequestController {
         req.body
       );
 
-      res.status(201).json({
-        status: "success",
-        message: "Service request submitted successfully.",
-        data: {
-          serviceRequest: result,
-        },
-      });
+      sendCreated(
+        res,
+        { serviceRequest: result },
+        "Service request submitted successfully."
+      );
     }
   );
 
@@ -40,14 +39,13 @@ export class ServiceRequestController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        data: {
-          requests: result.requests,
-          summary: result.summary,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(
+        res,
+        "requests",
+        result.requests,
+        result.pagination,
+        { summary: result.summary }
+      );
     }
   );
 
@@ -63,12 +61,7 @@ export class ServiceRequestController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        data: {
-          serviceRequest: result,
-        },
-      });
+      sendSuccess(res, { serviceRequest: result });
     }
   );
 
@@ -89,13 +82,11 @@ export class ServiceRequestController {
         req.body
       );
 
-      res.status(200).json({
-        status: "success",
-        message: "Pilot assigned and mission scheduled successfully.",
-        data: {
-          serviceRequest: result,
-        },
-      });
+      sendSuccess(
+        res,
+        { serviceRequest: result },
+        "Pilot assigned and mission scheduled successfully."
+      );
     }
   );
 
@@ -112,13 +103,11 @@ export class ServiceRequestController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        message: "Service request status updated successfully.",
-        data: {
-          serviceRequest: result,
-        },
-      });
+      sendSuccess(
+        res,
+        { serviceRequest: result },
+        "Service request status updated successfully."
+      );
     }
   );
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { FarmerService } from "../services/farmer.service";
 import { asyncHandler } from "../utils/asyncHandler";
+import { sendSuccess, sendPaginated } from "../utils/response";
 
 export class FarmerController {
   /**
@@ -10,14 +11,7 @@ export class FarmerController {
   public static getAllFarmers = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await FarmerService.getAllFarmers(req.query as any);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          farmers: result.items,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(res, "farmers", result.items, result.pagination);
     }
   );
 
@@ -29,13 +23,7 @@ export class FarmerController {
     async (req: Request, res: Response): Promise<void> => {
       const farmerId = Number(req.params.id);
       const farmer = await FarmerService.getFarmerById(farmerId, req.user);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          farmer,
-        },
-      });
+      sendSuccess(res, { farmer });
     }
   );
 
@@ -51,13 +39,7 @@ export class FarmerController {
         req.query as any,
         req.user
       );
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          fields,
-        },
-      });
+      sendSuccess(res, { fields });
     }
   );
 
@@ -73,14 +55,7 @@ export class FarmerController {
         req.query as any,
         req.user
       );
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          serviceHistory: result.items,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(res, "serviceHistory", result.items, result.pagination);
     }
   );
 
@@ -96,15 +71,13 @@ export class FarmerController {
         req.query as any,
         req.user
       );
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          payments: result.payments,
-          summary: result.summary,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(
+        res,
+        "payments",
+        result.payments,
+        result.pagination,
+        { summary: result.summary }
+      );
     }
   );
 }

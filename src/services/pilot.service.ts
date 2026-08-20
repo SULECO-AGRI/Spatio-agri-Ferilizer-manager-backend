@@ -15,6 +15,7 @@ import { PaginatedResult, PaginationMeta } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
+import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import { PilotStatus, MissionStatus, PayoutStatus } from "../generated/prisma/enums";
 
 export class PilotService {
@@ -73,9 +74,7 @@ export class PilotService {
   public static async getAllPilots(
     query: PilotQueryDTO
   ): Promise<PaginatedResult<PilotListItemDTO>> {
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const { search, status, sortBy = "createdAt", sortOrder = "desc" } = query;
 
@@ -175,14 +174,7 @@ export class PilotService {
       };
     });
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return { items, pagination };
   }
@@ -349,9 +341,7 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const whereClause: any = {
       pilotId,
@@ -482,14 +472,7 @@ export class PilotService {
       };
     });
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return { items, pagination };
   }
@@ -685,9 +668,7 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const whereClause: any = { pilotId };
     if (query.status) {
@@ -707,8 +688,6 @@ export class PilotService {
         select: { amount: true, status: true },
       }),
     ]);
-
-    const totalPages = Math.ceil(total / limit) || 1;
 
     let totalSettled = 0;
     let totalPending = 0;
@@ -735,14 +714,7 @@ export class PilotService {
       createdAt: p.createdAt,
     }));
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return {
       payouts: items,
@@ -768,9 +740,7 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const whereClause: any = { pilotId };
     if (query.minRating !== undefined || query.maxRating !== undefined) {
@@ -811,8 +781,6 @@ export class PilotService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
-
     const items: PilotReviewItemDTO[] = reviews.map((r) => ({
       reviewId: r.reviewId,
       missionId: r.missionId,
@@ -829,14 +797,7 @@ export class PilotService {
       },
     }));
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return { items, pagination };
   }

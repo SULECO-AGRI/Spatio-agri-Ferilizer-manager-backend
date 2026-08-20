@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { PilotService } from "../services/pilot.service";
 import { asyncHandler } from "../utils/asyncHandler";
+import { sendSuccess, sendPaginated } from "../utils/response";
 
 export class PilotController {
   /**
@@ -10,14 +11,7 @@ export class PilotController {
   public static getAllPilots = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await PilotService.getAllPilots(req.query as any);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          pilots: result.items,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(res, "pilots", result.items, result.pagination);
     }
   );
 
@@ -29,13 +23,7 @@ export class PilotController {
     async (req: Request, res: Response): Promise<void> => {
       const pilotId = Number(req.params.id);
       const pilot = await PilotService.getPilotById(pilotId, req.user);
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          pilot,
-        },
-      });
+      sendSuccess(res, { pilot });
     }
   );
 
@@ -54,11 +42,7 @@ export class PilotController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        message: "Pilot status updated successfully.",
-        data: updated,
-      });
+      sendSuccess(res, updated, "Pilot status updated successfully.");
     }
   );
 
@@ -74,14 +58,7 @@ export class PilotController {
         req.query as any,
         req.user
       );
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          missions: result.items,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(res, "missions", result.items, result.pagination);
     }
   );
 
@@ -100,11 +77,7 @@ export class PilotController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        message: "Mission started successfully.",
-        data: result,
-      });
+      sendSuccess(res, result, "Mission started successfully.");
     }
   );
 
@@ -124,11 +97,7 @@ export class PilotController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        message: "Mission completed successfully.",
-        data: result,
-      });
+      sendSuccess(res, result, "Mission completed successfully.");
     }
   );
 
@@ -145,14 +114,13 @@ export class PilotController {
         req.user
       );
 
-      res.status(200).json({
-        status: "success",
-        data: {
-          payouts: result.payouts,
-          summary: result.summary,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(
+        res,
+        "payouts",
+        result.payouts,
+        result.pagination,
+        { summary: result.summary }
+      );
     }
   );
 
@@ -168,14 +136,7 @@ export class PilotController {
         req.query as any,
         req.user
       );
-
-      res.status(200).json({
-        status: "success",
-        data: {
-          reviews: result.items,
-          pagination: result.pagination,
-        },
-      });
+      sendPaginated(res, "reviews", result.items, result.pagination);
     }
   );
 }

@@ -12,6 +12,7 @@ import { PaginationMeta } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
+import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import {
   RequestStatus,
   RequestPriority,
@@ -156,9 +157,7 @@ export class ServiceRequestService {
       throw AppError.unauthorized("Authentication required.");
     }
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const userRole = requestUser.role.toLowerCase();
 
@@ -369,14 +368,7 @@ export class ServiceRequestService {
       };
     });
 
-    const pagination: PaginationMeta = {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
+    const pagination = buildPaginationMeta(total, page, limit);
 
     return {
       requests: items,
