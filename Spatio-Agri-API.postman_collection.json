@@ -1247,6 +1247,173 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "7. Admin Analytics & Fleet Reporting",
+      "item": [
+        {
+          "name": "Get Completed Missions Analytics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/completed-missions",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "completed-missions"]
+            },
+            "description": "Retrieves total completed missions, completed today, this month, last month, and month-over-month growth rate."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Revenue Analytics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/revenue",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "revenue"]
+            },
+            "description": "Retrieves gross revenue, company commission, pilot earnings, monthly comparisons, and average revenue per mission."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pilot Fleet Performance KPIs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/pilot-performance",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "pilot-performance"]
+            },
+            "description": "Retrieves fleet-wide average rating, total fleet flight hours, active vs inactive pilot count, and top performing pilot."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Farmer Growth Analytics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/farmer-growth",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "farmer-growth"]
+            },
+            "description": "Retrieves total registered farmers, new registrations this month vs last month, and percentage growth rate."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pilot Performance Table (Paginated & Sorted)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/pilot-performance-table?page=1&limit=10&sortBy=completedMissions&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "pilot-performance-table"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "completedMissions"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Retrieves data for the Pilot Performance Table including pilot name, completed/active missions, average ratings, flight hours, and earnings."
+          },
+          "response": []
+        },
+        {
+          "name": "Negative Test - Non-Admin Access to Analytics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{farmerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/revenue",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "revenue"]
+            },
+            "description": "Negative test expecting HTTP 403 Forbidden when a farmer attempts to query admin analytics."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [

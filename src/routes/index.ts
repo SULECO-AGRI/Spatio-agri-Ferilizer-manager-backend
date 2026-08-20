@@ -5,6 +5,7 @@ import farmerRoutes from "./farmer.routes";
 import pilotRoutes from "./pilot.routes";
 import serviceRequestRoutes from "./service-request.routes";
 import adminRoutes from "./admin.routes";
+import adminAnalyticsRoutes from "./admin-analytics.routes";
 
 const router = Router();
 
@@ -15,6 +16,8 @@ router.use("/pilots", pilotRoutes);
 router.use("/api/pilots", pilotRoutes);
 router.use("/service-requests", serviceRequestRoutes);
 router.use("/api/service-requests", serviceRequestRoutes);
+router.use("/admin/analytics", adminAnalyticsRoutes);
+router.use("/api/admin/analytics", adminAnalyticsRoutes);
 router.use("/admin", adminRoutes);
 router.use("/api/admin", adminRoutes);
 
