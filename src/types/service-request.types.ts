@@ -1,4 +1,5 @@
 import { PaginationMeta } from "./farmer.types";
+import { PageInfo } from "../utils/pagination";
 
 export interface CreateServiceRequestDTO {
   fieldId: number;
@@ -11,6 +12,9 @@ export interface CreateServiceRequestDTO {
 export interface ServiceRequestQueryDTO {
   page?: number;
   limit?: number;
+  cursor?: string;
+  take?: number;
+  direction?: "forward" | "backward";
   search?: string;
   status?: "PENDING" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "REJECTED";
   priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -156,4 +160,16 @@ export interface PaginatedServiceRequestsResponseDTO {
     totalCancelled: number;
   };
   pagination: PaginationMeta;
+}
+
+export interface CursorPaginatedServiceRequestsResponseDTO {
+  requests: ServiceRequestListItemDTO[];
+  summary: {
+    totalPending: number;
+    totalAssigned: number;
+    totalInProgress: number;
+    totalCompleted: number;
+    totalCancelled: number;
+  };
+  pageInfo: PageInfo;
 }

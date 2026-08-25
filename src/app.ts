@@ -2,8 +2,8 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
 import routes from "./routes";
+import { globalApiLimiter } from "./middlewares/rateLimiter";
 import { notFound } from "./middlewares/notFound";
 import { errorHandler } from "./middlewares/errorHandler";
 
@@ -15,7 +15,7 @@ app.use(compression());
 // 2. Security Headers via Helmet
 app.use(helmet());
 
-// 2. Strict Origin-Controlled CORS
+// 3. Strict Origin-Controlled CORS
 const defaultOrigins = [
   "http://localhost:8080",
   "http://localhost:5173",
@@ -61,18 +61,8 @@ app.use(
   })
 );
 
-// 3. Global API Rate Limiting (15 mins, max 300 requests/IP)
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    status: "error",
-    message: "Too many requests from this IP, please try again after 15 minutes.",
-  },
-});
-app.use(apiLimiter);
+// 4. Distributed Global API Rate Limiting (Redis-backed)
+app.use(globalApiLimiter);
 
 // 4. Body Parsers with payload limits
 app.use(express.json({ limit: "1mb" }));

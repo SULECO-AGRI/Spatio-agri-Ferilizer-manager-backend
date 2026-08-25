@@ -7,12 +7,18 @@ import {
   ServiceRequestListItemDTO,
   ServiceRequestDetailDTO,
   PaginatedServiceRequestsResponseDTO,
+  CursorPaginatedServiceRequestsResponseDTO,
 } from "../types/service-request.types";
 import { PaginationMeta } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
-import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
+import {
+  getPaginationOffsets,
+  buildPaginationMeta,
+  decodeCursor,
+  encodeCursor,
+} from "../utils/pagination";
 import {
   RequestStatus,
   RequestPriority,
@@ -147,16 +153,22 @@ export class ServiceRequestService {
   }
 
   /**
-   * 2. GET ALL SERVICE REQUESTS (Scoped: Admin sees all; Farmer sees own; Pilot sees assigned)
+   * 2. GET ALL SERVICE REQUESTS (Cursor or Offset Pagination)
    */
   public static async getAllServiceRequests(
     query: ServiceRequestQueryDTO,
     requestUser?: JwtPayload
-  ): Promise<PaginatedServiceRequestsResponseDTO> {
+  ): Promise<PaginatedServiceRequestsResponseDTO | CursorPaginatedServiceRequestsResponseDTO> {
     if (!requestUser) {
       throw AppError.unauthorized("Authentication required.");
     }
 
+    // Keyset / Cursor Pagination branch
+    if (query.cursor !== undefined || (query.take !== undefined && query.page === undefined)) {
+      return this.getServiceRequestsCursor(query, requestUser);
+    }
+
+    // Standard Offset Pagination branch
     const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
     const userRole = requestUser.role.toLowerCase();
@@ -378,6 +390,299 @@ export class ServiceRequestService {
         totalCancelled,
       },
       pagination,
+    };
+  }
+
+  /**
+   * Keyset / Cursor-Based Pagination for High-Performance Scalable Access
+   */
+  public static async getServiceRequestsCursor(
+    query: ServiceRequestQueryDTO,
+    requestUser?: JwtPayload
+  ): Promise<CursorPaginatedServiceRequestsResponseDTO> {
+    if (!requestUser) {
+      throw AppError.unauthorized("Authentication required.");
+    }
+
+    const limit = Math.min(Math.max(query.take || query.limit || 20, 1), 100);
+    const isForward = query.direction !== "backward";
+    const userRole = requestUser.role.toLowerCase();
+
+    // Base filter according to RBAC
+    const whereClause: any = {};
+
+    if (userRole === "farmer") {
+      whereClause.field = {
+        farmerId: requestUser.userId,
+      };
+    } else if (userRole === "pilot") {
+      whereClause.missions = {
+        some: {
+          pilotId: requestUser.userId,
+        },
+      };
+    } else if (userRole === "admin") {
+      if (query.farmerId) {
+        whereClause.field = {
+          farmerId: Number(query.farmerId),
+        };
+      }
+    }
+
+    if (query.status) {
+      whereClause.status = query.status as RequestStatus;
+    }
+
+    if (query.priority) {
+      whereClause.priority = query.priority as RequestPriority;
+    }
+
+    if (query.serviceType) {
+      whereClause.serviceType = query.serviceType as ServiceType;
+    }
+
+    if (query.fieldId) {
+      whereClause.fieldId = Number(query.fieldId);
+    }
+
+    if (query.startDate || query.endDate) {
+      whereClause.preferredDate = {};
+      if (query.startDate) {
+        whereClause.preferredDate.gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        whereClause.preferredDate.lte = new Date(query.endDate);
+      }
+    }
+
+    if (query.search && query.search.trim() !== "") {
+      const searchTerm = query.search.trim();
+      whereClause.OR = [
+        { requestCode: { contains: searchTerm, mode: "insensitive" } },
+        {
+          field: {
+            OR: [
+              { fieldName: { contains: searchTerm, mode: "insensitive" } },
+              { cropType: { contains: searchTerm, mode: "insensitive" } },
+              { district: { contains: searchTerm, mode: "insensitive" } },
+              {
+                farmer: {
+                  user: {
+                    OR: [
+                      { firstName: { contains: searchTerm, mode: "insensitive" } },
+                      { lastName: { contains: searchTerm, mode: "insensitive" } },
+                      { mobile: { contains: searchTerm, mode: "insensitive" } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ];
+    }
+
+    // Keyset cursor condition (createdAt, requestId)
+    if (query.cursor) {
+      const decoded = decodeCursor(query.cursor);
+      if (decoded) {
+        if (isForward) {
+          whereClause.AND = [
+            ...(whereClause.AND || []),
+            {
+              OR: [
+                { createdAt: { lt: decoded.createdAt } },
+                {
+                  createdAt: decoded.createdAt,
+                  requestId: { lt: decoded.id },
+                },
+              ],
+            },
+          ];
+        } else {
+          whereClause.AND = [
+            ...(whereClause.AND || []),
+            {
+              OR: [
+                { createdAt: { gt: decoded.createdAt } },
+                {
+                  createdAt: decoded.createdAt,
+                  requestId: { gt: decoded.id },
+                },
+              ],
+            },
+          ];
+        }
+      }
+    }
+
+    // Base query for summary counts (scoped by user permissions)
+    const baseScopeWhere =
+      userRole === "farmer"
+        ? { field: { farmerId: requestUser.userId } }
+        : userRole === "pilot"
+        ? { missions: { some: { pilotId: requestUser.userId } } }
+        : {};
+
+    const [requests, summaryCounts] = await Promise.all([
+      prisma.serviceRequest.findMany({
+        where: whereClause,
+        take: limit + 1, // Fetch limit + 1 to detect next/previous page
+        orderBy: [
+          { createdAt: isForward ? "desc" : "asc" },
+          { requestId: isForward ? "desc" : "asc" },
+        ],
+        include: {
+          field: {
+            include: {
+              farmer: {
+                include: {
+                  user: {
+                    select: {
+                      userId: true,
+                      firstName: true,
+                      lastName: true,
+                      email: true,
+                      mobile: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          missions: {
+            include: {
+              pilot: {
+                include: {
+                  user: {
+                    select: {
+                      userId: true,
+                      firstName: true,
+                      lastName: true,
+                      mobile: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.serviceRequest.groupBy({
+        by: ["status"],
+        where: baseScopeWhere,
+        _count: { status: true },
+      }),
+    ]);
+
+    let totalPending = 0;
+    let totalAssigned = 0;
+    let totalInProgress = 0;
+    let totalCompleted = 0;
+    let totalCancelled = 0;
+
+    for (const sc of summaryCounts) {
+      if (sc.status === RequestStatus.PENDING) totalPending = sc._count.status;
+      if (sc.status === RequestStatus.ASSIGNED) totalAssigned = sc._count.status;
+      if (sc.status === RequestStatus.IN_PROGRESS) totalInProgress = sc._count.status;
+      if (sc.status === RequestStatus.COMPLETED) totalCompleted = sc._count.status;
+      if (sc.status === RequestStatus.CANCELLED) totalCancelled = sc._count.status;
+    }
+
+    const hasExtraRow = requests.length > limit;
+    const rawResultRows = hasExtraRow ? requests.slice(0, limit) : requests;
+    if (!isForward) {
+      rawResultRows.reverse();
+    }
+
+    const items: ServiceRequestListItemDTO[] = rawResultRows.map((req) => {
+      const farmerUser = req.field.farmer.user;
+      const latestMission = req.missions[0] || null;
+      const assignedPilot =
+        latestMission && latestMission.pilot
+          ? {
+              userId: latestMission.pilot.userId,
+              fullName: `${latestMission.pilot.user.firstName} ${latestMission.pilot.user.lastName}`.trim(),
+              mobile: latestMission.pilot.user.mobile,
+              licenceNumber: latestMission.pilot.licenceNumber,
+              status: latestMission.pilot.status,
+            }
+          : null;
+
+      return {
+        requestId: req.requestId,
+        requestCode: req.requestCode,
+        serviceType: req.serviceType,
+        preferredDate: req.preferredDate,
+        priority: req.priority,
+        status: req.status,
+        estimatedCost: Number(req.estimatedCost),
+        farmer: {
+          userId: farmerUser.userId,
+          fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
+          email: farmerUser.email,
+          mobile: farmerUser.mobile,
+          nic: req.field.farmer.nic,
+          address: req.field.farmer.address,
+        },
+        field: {
+          id: req.field.id,
+          fieldName: req.field.fieldName,
+          cropType: req.field.cropType,
+          area: Number(req.field.area),
+          district: req.field.district,
+          province: req.field.province,
+          city: req.field.city,
+          village: req.field.village,
+        },
+        assignedPilot,
+        mission: latestMission
+          ? {
+              missionId: latestMission.missionId,
+              status: latestMission.status,
+              startedAt: latestMission.startedAt,
+              completedAt: latestMission.completedAt,
+            }
+          : null,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+
+    const startCursor =
+      items.length > 0
+        ? encodeCursor({
+            id: items[0].requestId,
+            createdAt: items[0].createdAt,
+          })
+        : null;
+
+    const endCursor =
+      items.length > 0
+        ? encodeCursor({
+            id: items[items.length - 1].requestId,
+            createdAt: items[items.length - 1].createdAt,
+          })
+        : null;
+
+    const pageInfo = {
+      hasNextPage: isForward ? hasExtraRow : !!query.cursor,
+      hasPreviousPage: isForward ? !!query.cursor : hasExtraRow,
+      startCursor,
+      endCursor,
+      count: items.length,
+    };
+
+    return {
+      requests: items,
+      summary: {
+        totalPending,
+        totalAssigned,
+        totalInProgress,
+        totalCompleted,
+        totalCancelled,
+      },
+      pageInfo,
     };
   }
 

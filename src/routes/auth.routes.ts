@@ -1,28 +1,16 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 import { AuthController } from "../controllers/auth.controller";
 import { authenticate } from "../middlewares/auth.middleware";
+import { authLimiter } from "../middlewares/rateLimiter";
 
 const router = Router();
 
-// Dedicated strict rate limiter for login attempts (15 mins, max 15 attempts/IP)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 15,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    status: "error",
-    message: "Too many login attempts. Please try again after 15 minutes.",
-  },
-});
+// Registration Routes (Protected by distributed Redis rate limiter)
+router.post("/register/farmer", authLimiter, AuthController.registerFarmer);
+router.post("/register/pilot", authLimiter, AuthController.registerPilot);
 
-// Registration Routes
-router.post("/register/farmer", AuthController.registerFarmer);
-router.post("/register/pilot", AuthController.registerPilot);
-
-// Login Route (Role verified: Admin, Pilot, Farmer) with dedicated rate limiter
-router.post("/login", loginLimiter, AuthController.login);
+// Login Route (Protected by distributed Redis rate limiter)
+router.post("/login", authLimiter, AuthController.login);
 
 // Current User Profile Route
 router.get("/me", authenticate, AuthController.getMe);

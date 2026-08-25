@@ -43,14 +43,23 @@ export class ServiceRequestController {
   /**
    * GET /service-requests
    * List all service requests (Admin sees all; Farmer sees own; Pilot sees assigned)
-   * Cache-Aside enabled with X-Cache header
+   * Supports both Keyset/Cursor and Offset Pagination with Cache-Aside enabled
    */
   public static getAllServiceRequests = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const cacheKey = ServiceRequestCacheService.buildListCacheKey(
-        req.query as any,
-        req.user
-      );
+      const isCursorMode =
+        req.query.cursor !== undefined ||
+        (req.query.take !== undefined && req.query.page === undefined);
+
+      const cacheKey = isCursorMode
+        ? ServiceRequestCacheService.buildCursorCacheKey(
+            req.query as any,
+            req.user
+          )
+        : ServiceRequestCacheService.buildListCacheKey(
+            req.query as any,
+            req.user
+          );
 
       const { data: result } = await CacheService.getCachedOrFetch({
         key: cacheKey,
@@ -62,6 +71,15 @@ export class ServiceRequestController {
           ),
         res,
       });
+
+      if ("pageInfo" in result) {
+        sendSuccess(res, {
+          requests: result.requests,
+          pageInfo: result.pageInfo,
+          summary: result.summary,
+        });
+        return;
+      }
 
       sendPaginated(
         res,

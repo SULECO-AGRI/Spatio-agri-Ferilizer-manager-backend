@@ -90,15 +90,27 @@ export const serviceRequestListQuerySchema = z.object({
   page: z
     .string()
     .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 1))
-    .refine((val) => val >= 1, { message: "Page must be 1 or greater" }),
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine((val) => val === undefined || val >= 1, { message: "Page must be 1 or greater" }),
   limit: z
     .string()
     .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 10))
-    .refine((val) => val >= 1 && val <= 100, {
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine((val) => val === undefined || (val >= 1 && val <= 100), {
       message: "Limit must be between 1 and 100",
     }),
+  cursor: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.trim() : undefined)),
+  take: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine((val) => val === undefined || (val >= 1 && val <= 100), {
+      message: "Take must be between 1 and 100",
+    }),
+  direction: z.enum(["forward", "backward"]).optional().default("forward"),
   search: z
     .string()
     .max(100, "Search query cannot exceed 100 characters")

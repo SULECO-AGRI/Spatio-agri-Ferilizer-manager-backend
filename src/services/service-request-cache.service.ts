@@ -47,6 +47,39 @@ export class ServiceRequestCacheService {
   }
 
   /**
+   * Generates a deterministic cache key for Service Requests keyset/cursor queries
+   */
+  public static buildCursorCacheKey(
+    query: ServiceRequestQueryDTO,
+    user?: JwtPayload
+  ): string {
+    const role = user?.role ? user.role.toLowerCase() : "anonymous";
+    const userId = user?.userId || 0;
+
+    const cursor = query.cursor || "start";
+    const take = query.take || query.limit || 20;
+    const direction = query.direction || "forward";
+    const status = query.status || "all";
+    const priority = query.priority || "all";
+    const fieldId = query.fieldId || "all";
+    const serviceType = query.serviceType || "all";
+    const farmerId = query.farmerId || "all";
+    const start = query.startDate || "none";
+    const end = query.endDate || "none";
+
+    let searchKey = "none";
+    if (query.search && query.search.trim()) {
+      searchKey = crypto
+        .createHash("md5")
+        .update(query.search.trim().toLowerCase())
+        .digest("hex")
+        .substring(0, 10);
+    }
+
+    return `service_requests:cursor:role=${role}:user=${userId}:c=${cursor}:t=${take}:dir=${direction}:s=${status}:pr=${priority}:stype=${serviceType}:f=${fieldId}:fid=${farmerId}:q=${searchKey}:d1=${start}:d2=${end}`;
+  }
+
+  /**
    * Generates cache key for a single service request detail
    */
   public static buildDetailCacheKey(requestId: number): string {
@@ -76,7 +109,10 @@ export class ServiceRequestCacheService {
     // 2. Invalidate all paginated/filtered list caches using non-blocking SCAN + UNLINK
     promises.push(CacheService.delByPattern("service_requests:list:*"));
 
-    // 3. Invalidate metrics/summary cache keys
+    // 3. Invalidate all cursor-paginated caches
+    promises.push(CacheService.delByPattern("service_requests:cursor:*"));
+
+    // 4. Invalidate metrics/summary cache keys
     promises.push(CacheService.delByPattern("service_requests:metrics:*"));
 
     await Promise.allSettled(promises);

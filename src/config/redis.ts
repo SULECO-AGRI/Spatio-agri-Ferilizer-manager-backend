@@ -22,7 +22,7 @@ const getRedisOptions = (): RedisOptions => {
     port,
     password,
     maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+    enableOfflineQueue: true,
     connectTimeout: 5000,
     lazyConnect: true,
     retryStrategy: (times: number) => {
@@ -60,7 +60,7 @@ export const getRedisClient = (): Redis | null => {
     if (redisUrl) {
       redisClient = new Redis(redisUrl, {
         maxRetriesPerRequest: 1,
-        enableOfflineQueue: false,
+        enableOfflineQueue: true,
         connectTimeout: 6000,
         lazyConnect: true,
         keepAlive: 30000,
