@@ -16,19 +16,46 @@ app.use(compression());
 app.use(helmet());
 
 // 2. Strict Origin-Controlled CORS
-const allowedOrigins = process.env.ALLOWED_ORIGINS
+const defaultOrigins = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:4173",
+  "http://127.0.0.1:8080",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:4173",
+];
+
+const envOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
-  : ["http://localhost:3000", "http://localhost:5173"];
+  : [];
+
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile clients, curl, server-to-server) or in allowed list
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS policy blocked access for origin: ${origin}`));
+      // Allow requests with no origin (e.g. mobile clients, curl, server-to-server)
+      if (!origin) {
+        return callback(null, true);
       }
+
+      // Allow configured origins
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // In development mode, allow any localhost / 127.0.0.1 origin
+      if (
+        process.env.NODE_ENV !== "production" &&
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      // Deny CORS access gracefully (avoids throwing 500 internal server error)
+      return callback(null, false);
     },
     credentials: true,
   })
