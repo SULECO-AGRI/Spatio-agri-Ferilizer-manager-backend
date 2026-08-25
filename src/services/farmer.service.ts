@@ -442,8 +442,6 @@ export class FarmerService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
-
     const items: FarmerServiceRequestDTO[] = requests.map((req) => ({
       requestId: req.requestId,
       requestCode: req.requestCode,
@@ -537,7 +535,7 @@ export class FarmerService {
       filteredWhere.paymentMethod = query.paymentMethod;
     }
 
-    const [total, payments, allFarmerPayments] = await Promise.all([
+    const [total, payments, paymentStatusGroups, totalTransactions] = await Promise.all([
       prisma.payment.count({ where: filteredWhere }),
       prisma.payment.findMany({
         where: filteredWhere,
@@ -587,26 +585,27 @@ export class FarmerService {
           },
         },
       }),
-      prisma.payment.findMany({
+      prisma.payment.groupBy({
+        by: ["paymentStatus"],
         where: baseWhere,
-        select: {
+        _sum: {
           totalAmount: true,
-          paymentStatus: true,
         },
       }),
+      prisma.payment.count({
+        where: baseWhere,
+      }),
     ]);
-
-    const totalPages = Math.ceil(total / limit) || 1;
 
     let totalPaid = 0;
     let totalPending = 0;
 
-    for (const p of allFarmerPayments) {
-      const amt = Number(p.totalAmount || 0);
-      if (p.paymentStatus === "COMPLETED") {
-        totalPaid += amt;
-      } else if (p.paymentStatus === "PENDING") {
-        totalPending += amt;
+    for (const g of paymentStatusGroups) {
+      const amt = Number(g._sum.totalAmount || 0);
+      if (g.paymentStatus === "COMPLETED") {
+        totalPaid = amt;
+      } else if (g.paymentStatus === "PENDING") {
+        totalPending = amt;
       }
     }
 
@@ -649,7 +648,7 @@ export class FarmerService {
       summary: {
         totalPaid: Number(totalPaid.toFixed(2)),
         totalPending: Number(totalPending.toFixed(2)),
-        totalTransactions: allFarmerPayments.length,
+        totalTransactions,
       },
       pagination,
     };

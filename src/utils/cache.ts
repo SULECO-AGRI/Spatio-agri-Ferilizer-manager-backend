@@ -167,6 +167,7 @@ export class CacheService {
       if (res && !res.headersSent) {
         res.setHeader("X-Cache", "HIT");
       }
+      console.log(`\x1b[32m[CACHE HIT]\x1b[0m ⚡ Data fetched from REDIS CACHE (Key: ${key})`);
       return { data: cachedData, source: "HIT" };
     }
 
@@ -182,6 +183,12 @@ export class CacheService {
 
     if (res && !res.headersSent) {
       res.setHeader("X-Cache", source);
+    }
+
+    if (source === "MISS") {
+      console.log(`\x1b[33m[CACHE MISS]\x1b[0m 🗄️  Data fetched from POSTGRESQL DATABASE -> Saved to Redis (Key: ${key})`);
+    } else {
+      console.log(`\x1b[36m[DB DIRECT]\x1b[0m 🗄️  Data fetched directly from POSTGRESQL DATABASE (Redis Bypassed)`);
     }
 
     return { data: freshData, source };

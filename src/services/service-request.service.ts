@@ -298,8 +298,6 @@ export class ServiceRequestService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
-
     let totalPending = 0;
     let totalAssigned = 0;
     let totalInProgress = 0;

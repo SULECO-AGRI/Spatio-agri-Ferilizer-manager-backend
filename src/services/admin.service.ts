@@ -46,8 +46,9 @@ export class AdminService {
       pendingRequests,
       activeMissions,
       availablePilots,
-      todayPayments,
-      ninetyDaysMissions,
+      todayRevenueAgg,
+      periodMissionGroups,
+      totalPeriodMissions,
     ] = await Promise.all([
       // 1. Pending service requests
       prisma.serviceRequest.count({
@@ -64,8 +65,8 @@ export class AdminService {
         where: { status: PilotStatus.ACTIVE },
       }),
 
-      // 4. Payments processed today
-      prisma.payment.findMany({
+      // 4. Payments aggregated directly in PostgreSQL
+      prisma.payment.aggregate({
         where: {
           paymentStatus: PaymentStatus.COMPLETED,
           createdAt: {
@@ -73,42 +74,44 @@ export class AdminService {
             lte: endOfDay,
           },
         },
-        select: {
+        _sum: {
           totalAmount: true,
           companyCommission: true,
           pilotEarnings: true,
         },
       }),
 
-      // 5. Missions in the period for success rate calculation
-      prisma.mission.findMany({
+      // 5. Mission status counts aggregated directly in PostgreSQL
+      prisma.mission.groupBy({
+        by: ["status"],
         where: {
           createdAt: { gte: cutoffDate },
         },
-        select: {
+        _count: {
           status: true,
+        },
+      }),
+
+      // 6. Total missions in period
+      prisma.mission.count({
+        where: {
+          createdAt: { gte: cutoffDate },
         },
       }),
     ]);
 
-    // Calculate today's revenue totals
-    let todayTotalAmount = 0;
-    let todayCompanyCommission = 0;
-    let todayPilotEarnings = 0;
+    // Calculate today's revenue totals from DB aggregation
+    const todayTotalAmount = Number(todayRevenueAgg._sum.totalAmount || 0);
+    const todayCompanyCommission = Number(todayRevenueAgg._sum.companyCommission || 0);
+    const todayPilotEarnings = Number(todayRevenueAgg._sum.pilotEarnings || 0);
 
-    for (const p of todayPayments) {
-      todayTotalAmount += Number(p.totalAmount || 0);
-      todayCompanyCommission += Number(p.companyCommission || 0);
-      todayPilotEarnings += Number(p.pilotEarnings || 0);
-    }
-
-    // Calculate period success rate
+    // Calculate period success rate from DB groups
     let completedCount = 0;
     let failedCount = 0;
 
-    for (const m of ninetyDaysMissions) {
-      if (m.status === MissionStatus.COMPLETED) completedCount++;
-      if (m.status === MissionStatus.FAILED) failedCount++;
+    for (const g of periodMissionGroups) {
+      if (g.status === MissionStatus.COMPLETED) completedCount = g._count.status;
+      if (g.status === MissionStatus.FAILED) failedCount = g._count.status;
     }
 
     const totalFinished = completedCount + failedCount;
@@ -129,7 +132,7 @@ export class AdminService {
       },
       missionSuccessRate90Days: {
         ratePercentage,
-        totalMissions: ninetyDaysMissions.length,
+        totalMissions: totalPeriodMissions,
         completed: completedCount,
         failed: failedCount,
         periodDays: days,

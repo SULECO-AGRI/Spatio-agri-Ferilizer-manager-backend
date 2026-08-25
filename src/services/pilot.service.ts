@@ -150,8 +150,6 @@ export class PilotService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
-
     const items: PilotListItemDTO[] = pilots.map((pilot) => {
       const profile = pilot.pilotProfile;
       return {
@@ -413,8 +411,6 @@ export class PilotService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
-
     const items: PilotMissionItemDTO[] = missions.map((m) => {
       const sr = m.serviceRequest;
       const field = sr.field;
@@ -675,7 +671,7 @@ export class PilotService {
       whereClause.status = query.status as PayoutStatus;
     }
 
-    const [total, payouts, allPayouts] = await Promise.all([
+    const [total, payouts, payoutGroups] = await Promise.all([
       prisma.payout.count({ where: whereClause }),
       prisma.payout.findMany({
         where: whereClause,
@@ -683,9 +679,10 @@ export class PilotService {
         take: limit,
         orderBy: { createdAt: "desc" },
       }),
-      prisma.payout.findMany({
+      prisma.payout.groupBy({
+        by: ["status"],
         where: { pilotId },
-        select: { amount: true, status: true },
+        _sum: { amount: true },
       }),
     ]);
 
@@ -693,11 +690,11 @@ export class PilotService {
     let totalPending = 0;
     let totalProcessing = 0;
 
-    for (const p of allPayouts) {
-      const amt = Number(p.amount || 0);
-      if (p.status === PayoutStatus.SETTLED) totalSettled += amt;
-      if (p.status === PayoutStatus.PENDING) totalPending += amt;
-      if (p.status === PayoutStatus.PROCESSING) totalProcessing += amt;
+    for (const g of payoutGroups) {
+      const amt = Number(g._sum.amount || 0);
+      if (g.status === PayoutStatus.SETTLED) totalSettled = amt;
+      if (g.status === PayoutStatus.PENDING) totalPending = amt;
+      if (g.status === PayoutStatus.PROCESSING) totalProcessing = amt;
     }
 
     const items = payouts.map((p) => ({

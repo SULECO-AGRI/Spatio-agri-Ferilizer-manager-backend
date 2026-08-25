@@ -23,15 +23,15 @@ const getRedisOptions = (): RedisOptions => {
     password,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
-    connectTimeout: 4000,
+    connectTimeout: 5000,
     lazyConnect: true,
     retryStrategy: (times: number) => {
-      // Stop retrying after 3 attempts if Redis is not running locally
+      // Stop retrying after 3 attempts if Redis is local and not running
       if (times > 3) {
         if (!hasLoggedOfflineWarning) {
           hasLoggedOfflineWarning = true;
           console.warn(
-            `[Redis] Offline: Cannot reach Redis at ${host}:${port}. Operating in degraded mode (direct PostgreSQL fallback).`
+            `[Redis] Offline: Cannot reach Redis at ${host}:${port}. Operating in direct PostgreSQL fallback mode.`
           );
         }
         return null;
@@ -55,36 +55,44 @@ export const getRedisClient = (): Redis | null => {
 
   if (!redisClient) {
     const redisUrl = process.env.REDIS_URL;
-    const options = getRedisOptions();
+    const defaultOptions = getRedisOptions();
 
-    redisClient = redisUrl
-      ? new Redis(redisUrl, {
-          maxRetriesPerRequest: 1,
-          enableOfflineQueue: false,
-          connectTimeout: 4000,
-          lazyConnect: true,
-          retryStrategy: options.retryStrategy,
-        })
-      : new Redis(options);
+    if (redisUrl) {
+      redisClient = new Redis(redisUrl, {
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+        connectTimeout: 6000,
+        lazyConnect: true,
+        keepAlive: 30000,
+        family: 4,
+        retryStrategy: (times: number) => {
+          // Cloud Redis auto-reconnect backoff
+          return Math.min(times * 200, 3000);
+        },
+      });
+    } else {
+      redisClient = new Redis(defaultOptions);
+    }
 
     redisClient.on("connect", () => {
       hasLoggedOfflineWarning = false;
-      console.log("[Redis] Connected to server.");
+      console.log("\x1b[32m[Redis]\x1b[0m Connected to Redis server.");
     });
 
     redisClient.on("ready", () => {
       isReady = true;
       hasLoggedOfflineWarning = false;
-      console.log("[Redis] Client ready to process commands.");
+      console.log("\x1b[32m[Redis]\x1b[0m Client ready to cache and serve commands.");
     });
 
     redisClient.on("error", (error: Error) => {
       isReady = false;
-      if (!hasLoggedOfflineWarning) {
+      // Filter harmless transient reconnect notices
+      if (!hasLoggedOfflineWarning && !error.message.includes("ECONNRESET")) {
         hasLoggedOfflineWarning = true;
-        const target = redisUrl || `${options.host}:${options.port}`;
+        const target = redisUrl ? "Cloud Redis" : `${defaultOptions.host}:${defaultOptions.port}`;
         console.warn(
-          `[Redis] Cannot connect to Redis at ${target} (${error.message}). Caching disabled, falling back to PostgreSQL.`
+          `\x1b[33m[Redis]\x1b[0m Connection warning (${error.message}). Operating with direct PostgreSQL fallback.`
         );
       }
     });
@@ -103,7 +111,7 @@ export const getRedisClient = (): Redis | null => {
       if (!hasLoggedOfflineWarning) {
         hasLoggedOfflineWarning = true;
         console.warn(
-          `[Redis] Initial connection failed (${err.message}). Caching disabled, falling back to PostgreSQL.`
+          `\x1b[33m[Redis]\x1b[0m Initial connection note (${err.message}). Operating with direct PostgreSQL fallback.`
         );
       }
     });

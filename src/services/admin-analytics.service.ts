@@ -106,55 +106,41 @@ export class AdminAnalyticsService {
       this.getDateRanges();
 
     const [
-      allPayments,
-      thisMonthPayments,
-      lastMonthPayments,
+      allPaymentsAgg,
+      thisMonthAgg,
+      lastMonthAgg,
       completedMissionsCount,
     ] = await Promise.all([
-      prisma.payment.findMany({
+      prisma.payment.aggregate({
         where: { paymentStatus: PaymentStatus.COMPLETED },
-        select: {
+        _sum: {
           totalAmount: true,
           companyCommission: true,
           pilotEarnings: true,
         },
       }),
-      prisma.payment.findMany({
+      prisma.payment.aggregate({
         where: {
           paymentStatus: PaymentStatus.COMPLETED,
           createdAt: { gte: startOfThisMonth },
         },
-        select: { totalAmount: true },
+        _sum: { totalAmount: true },
       }),
-      prisma.payment.findMany({
+      prisma.payment.aggregate({
         where: {
           paymentStatus: PaymentStatus.COMPLETED,
           createdAt: { gte: startOfLastMonth, lte: endOfLastMonth },
         },
-        select: { totalAmount: true },
+        _sum: { totalAmount: true },
       }),
       prisma.mission.count({ where: { status: MissionStatus.COMPLETED } }),
     ]);
 
-    let totalRevenue = 0;
-    let companyCommission = 0;
-    let pilotEarnings = 0;
-
-    for (const p of allPayments) {
-      totalRevenue += Number(p.totalAmount || 0);
-      companyCommission += Number(p.companyCommission || 0);
-      pilotEarnings += Number(p.pilotEarnings || 0);
-    }
-
-    const revenueThisMonth = thisMonthPayments.reduce(
-      (sum, p) => sum + Number(p.totalAmount || 0),
-      0
-    );
-
-    const revenueLastMonth = lastMonthPayments.reduce(
-      (sum, p) => sum + Number(p.totalAmount || 0),
-      0
-    );
+    const totalRevenue = Number(allPaymentsAgg._sum.totalAmount || 0);
+    const companyCommission = Number(allPaymentsAgg._sum.companyCommission || 0);
+    const pilotEarnings = Number(allPaymentsAgg._sum.pilotEarnings || 0);
+    const revenueThisMonth = Number(thisMonthAgg._sum.totalAmount || 0);
+    const revenueLastMonth = Number(lastMonthAgg._sum.totalAmount || 0);
 
     let monthOverMonthGrowthPercentage = 0;
     if (revenueLastMonth > 0) {

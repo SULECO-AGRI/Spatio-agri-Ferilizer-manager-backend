@@ -10,8 +10,11 @@ import adminAnalyticsRoutes from "./admin-analytics.routes";
 const router = Router();
 
 router.use("/health", healthRoutes);
+router.use("/api/health", healthRoutes);
 router.use("/auth", authRoutes);
+router.use("/api/auth", authRoutes);
 router.use("/farmers", farmerRoutes);
+router.use("/api/farmers", farmerRoutes);
 router.use("/pilots", pilotRoutes);
 router.use("/api/pilots", pilotRoutes);
 router.use("/service-requests", serviceRequestRoutes);

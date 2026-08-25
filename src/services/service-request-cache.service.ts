@@ -80,5 +80,10 @@ export class ServiceRequestCacheService {
     promises.push(CacheService.delByPattern("service_requests:metrics:*"));
 
     await Promise.allSettled(promises);
+    console.log(
+      `\x1b[35m[CACHE INVALIDATION]\x1b[0m 🔄 Service request caches purged${
+        requestId ? ` for request #${requestId}` : ""
+      }.`
+    );
   }
 }
