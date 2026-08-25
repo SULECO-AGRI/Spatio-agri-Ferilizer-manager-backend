@@ -187,6 +187,7 @@ model Field {
   farmer          FarmerProfile    @relation(fields: [farmerId], references: [userId], onDelete: Cascade)
   serviceRequests ServiceRequest[]
 
+  @@index([farmerId, createdAt(sort: Desc)])
   @@index([farmerId])
   @@index([district, province])
   @@map("fields")
@@ -212,10 +213,12 @@ model ServiceRequest {
   field    Field     @relation(fields: [fieldId], references: [id], onDelete: Restrict)
   missions Mission[]
 
-  @@index([fieldId])
-  @@index([status])
-  @@index([preferredDate])
-  @@index([priority])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([fieldId, status, createdAt(sort: Desc)])
+  @@index([fieldId, createdAt(sort: Desc)])
+  @@index([preferredDate, status, createdAt(sort: Desc)])
+  @@index([priority, status, createdAt(sort: Desc)])
+  @@index([serviceType, status, createdAt(sort: Desc)])
   @@map("service_requests")
 }
 
@@ -239,10 +242,10 @@ model Mission {
   review         Review?
   payment        Payment?
 
-  @@index([requestId])
-  @@index([pilotId])
-  @@index([assignedBy])
-  @@index([status])
+  @@index([pilotId, status, createdAt(sort: Desc)])
+  @@index([requestId, status])
+  @@index([assignedBy, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
   @@index([startedAt])
   @@map("missions")
 }
