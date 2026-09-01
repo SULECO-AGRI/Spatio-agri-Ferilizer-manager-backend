@@ -29,7 +29,7 @@ router.use(authenticate);
  */
 router.get(
   "/",
-  authorize("Admin"),
+  authorize("Admin", "Pilot"),
   validateQuery(pilotListQuerySchema),
   PilotController.getAllPilots
 );

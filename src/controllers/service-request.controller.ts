@@ -4,6 +4,7 @@ import {
   ServiceRequestCacheService,
   SERVICE_REQUEST_CACHE_TTL,
 } from "../services/service-request-cache.service";
+import { PilotCacheService } from "../services/pilot-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
@@ -146,9 +147,10 @@ export class ServiceRequestController {
       );
 
       // Event-driven cache purging on pilot assignment
-      ServiceRequestCacheService.invalidateServiceRequestCaches(
-        requestId
-      ).catch((err) => {
+      Promise.allSettled([
+        ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
+        PilotCacheService.invalidatePilotCaches(req.body.pilotId),
+      ]).catch((err) => {
         console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
       });
 

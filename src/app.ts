@@ -4,10 +4,14 @@ import helmet from "helmet";
 import compression from "compression";
 import routes from "./routes";
 import { globalApiLimiter } from "./middlewares/rateLimiter";
+import { requestLogger } from "./middlewares/requestLogger";
 import { notFound } from "./middlewares/notFound";
 import { errorHandler } from "./middlewares/errorHandler";
 
 const app: Application = express();
+
+// 0. Terminal Request Logger (logs method, URL, status, duration, CACHE HIT/MISS)
+app.use(requestLogger);
 
 // 1. Response Compression (gzip / deflate)
 app.use(compression());

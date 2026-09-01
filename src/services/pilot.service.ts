@@ -69,7 +69,7 @@ export class PilotService {
   }
 
   /**
-   * 1. GET ALL PILOTS (Admin Only - Paginated, Filterable, Searchable)
+   * 1. GET ALL PILOTS (Paginated, Filterable, Searchable)
    */
   public static async getAllPilots(
     query: PilotQueryDTO
@@ -80,29 +80,39 @@ export class PilotService {
 
     const whereClause: any = {
       role: {
-        name: "Pilot",
+        name: { equals: "Pilot", mode: "insensitive" },
       },
     };
 
+    const andConditions: any[] = [];
+
     if (status) {
-      whereClause.pilotProfile = {
-        status: status as PilotStatus,
-      };
+      andConditions.push({
+        pilotProfile: {
+          status: status as PilotStatus,
+        },
+      });
     }
 
     if (search && search.trim() !== "") {
       const searchTerm = search.trim();
-      whereClause.OR = [
-        { firstName: { contains: searchTerm, mode: "insensitive" } },
-        { lastName: { contains: searchTerm, mode: "insensitive" } },
-        { email: { contains: searchTerm, mode: "insensitive" } },
-        { mobile: { contains: searchTerm, mode: "insensitive" } },
-        {
-          pilotProfile: {
-            licenceNumber: { contains: searchTerm, mode: "insensitive" },
+      andConditions.push({
+        OR: [
+          { firstName: { contains: searchTerm, mode: "insensitive" } },
+          { lastName: { contains: searchTerm, mode: "insensitive" } },
+          { email: { contains: searchTerm, mode: "insensitive" } },
+          { mobile: { contains: searchTerm, mode: "insensitive" } },
+          {
+            pilotProfile: {
+              licenceNumber: { contains: searchTerm, mode: "insensitive" },
+            },
           },
-        },
-      ];
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      whereClause.AND = andConditions;
     }
 
     let orderBy: any = { createdAt: sortOrder };
@@ -116,7 +126,7 @@ export class PilotService {
       orderBy = { pilotProfile: { totalFlightHours: sortOrder } };
     }
 
-    const [total, pilots] = await Promise.all([
+    const [total, pilots] = await prisma.$transaction([
       prisma.user.count({ where: whereClause }),
       prisma.user.findMany({
         where: whereClause,
@@ -140,7 +150,9 @@ export class PilotService {
               totalFlightHours: true,
               missions: {
                 where: {
-                  status: MissionStatus.IN_PROGRESS,
+                  status: {
+                    in: [MissionStatus.SCHEDULED, MissionStatus.IN_PROGRESS],
+                  },
                 },
                 select: { missionId: true },
               },
@@ -161,9 +173,9 @@ export class PilotService {
         mobile: pilot.mobile,
         licenceNumber: profile?.licenceNumber || "N/A",
         status: profile?.status || "INACTIVE",
-        ratings: profile?.ratings ? Number(profile.ratings) : null,
-        completedMissions: profile?.completedMissions || 0,
-        totalFlightHours: profile?.totalFlightHours
+        ratings: profile?.ratings !== null && profile?.ratings !== undefined ? Number(profile.ratings) : null,
+        completedMissions: profile?.completedMissions !== null && profile?.completedMissions !== undefined ? Number(profile.completedMissions) : 0,
+        totalFlightHours: profile?.totalFlightHours !== null && profile?.totalFlightHours !== undefined
           ? Number(profile.totalFlightHours)
           : 0,
         activeMissionsCount: profile?.missions ? profile.missions.length : 0,

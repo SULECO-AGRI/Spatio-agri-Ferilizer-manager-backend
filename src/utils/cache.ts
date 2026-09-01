@@ -160,19 +160,26 @@ export class CacheService {
   ): Promise<CacheFetchResult<T>> {
     const { key, ttlSeconds, fetchFn, res } = options;
 
+    const readStart = Date.now();
+
     // 1. Try reading from Cache
     const cachedData = await this.get<T>(key);
+    const readDuration = Date.now() - readStart;
 
     if (cachedData !== null) {
       if (res && !res.headersSent) {
         res.setHeader("X-Cache", "HIT");
       }
-      console.log(`\x1b[32m[CACHE HIT]\x1b[0m ⚡ Data fetched from REDIS CACHE (Key: ${key})`);
+      console.log(
+        `\x1b[32m[CACHE HIT]\x1b[0m ⚡ Fetched from REDIS CACHE in \x1b[1m${readDuration}ms\x1b[0m (Key: ${key})`
+      );
       return { data: cachedData, source: "HIT" };
     }
 
     // 2. Cache MISS or Redis Unavailable -> Fetch fresh data from primary DB
+    const dbStart = Date.now();
     const freshData = await fetchFn();
+    const dbDuration = Date.now() - dbStart;
 
     // 3. Store result in Redis asynchronously (fire & forget to not block client)
     this.set(key, freshData, ttlSeconds).catch((err) => {
@@ -186,9 +193,13 @@ export class CacheService {
     }
 
     if (source === "MISS") {
-      console.log(`\x1b[33m[CACHE MISS]\x1b[0m 🗄️  Data fetched from POSTGRESQL DATABASE -> Saved to Redis (Key: ${key})`);
+      console.log(
+        `\x1b[33m[CACHE MISS]\x1b[0m 🗄️  Fetched from POSTGRESQL in \x1b[1m${dbDuration}ms\x1b[0m -> Saved to Redis with TTL ${ttlSeconds}s (Key: ${key})`
+      );
     } else {
-      console.log(`\x1b[36m[DB DIRECT]\x1b[0m 🗄️  Data fetched directly from POSTGRESQL DATABASE (Redis Bypassed)`);
+      console.log(
+        `\x1b[36m[DB DIRECT]\x1b[0m 🗄️  Fetched directly from POSTGRESQL in \x1b[1m${dbDuration}ms\x1b[0m (Redis Bypassed)`
+      );
     }
 
     return { data: freshData, source };
