@@ -11,7 +11,7 @@ import {
   PilotReviewQueryDTO,
   PilotReviewItemDTO,
 } from "../types/pilot.types";
-import { PaginatedResult, PaginationMeta } from "../types/farmer.types";
+import { PaginatedResult } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";

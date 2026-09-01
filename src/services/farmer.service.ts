@@ -11,7 +11,6 @@ import {
   FarmerPaymentsResponseDTO,
   FarmerPaymentItemDTO,
   PaginatedResult,
-  PaginationMeta,
 } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";

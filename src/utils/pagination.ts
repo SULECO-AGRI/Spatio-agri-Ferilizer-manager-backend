@@ -1,14 +1,6 @@
 import { PaginationMeta } from "../types/farmer.types";
 
 /**
- * Keyset / Cursor Pagination Payload Definition
- */
-export interface CursorPayload {
-  id: number;
-  createdAt: Date | string;
-}
-
-/**
  * Standard PageInfo for Keyset/Cursor-paginated APIs
  */
 export interface PageInfo {
@@ -61,46 +53,6 @@ export function decodeCursor(cursorStr?: string | null): { id: number; createdAt
   } catch {
     return null;
   }
-}
-
-/**
- * Builds standard PageInfo from fetched items and limit
- */
-export function buildPageInfo<T extends { requestId: number; createdAt: Date }>(
-  items: T[],
-  limit: number,
-  hasExtraRow: boolean,
-  hasPrev = false
-): { paginatedItems: T[]; pageInfo: PageInfo } {
-  // If we fetched limit + 1 items, the extra row signifies hasNextPage
-  const paginatedItems = hasExtraRow ? items.slice(0, limit) : items;
-
-  const startCursor =
-    paginatedItems.length > 0
-      ? encodeCursor({
-          id: paginatedItems[0].requestId,
-          createdAt: paginatedItems[0].createdAt,
-        })
-      : null;
-
-  const endCursor =
-    paginatedItems.length > 0
-      ? encodeCursor({
-          id: paginatedItems[paginatedItems.length - 1].requestId,
-          createdAt: paginatedItems[paginatedItems.length - 1].createdAt,
-        })
-      : null;
-
-  return {
-    paginatedItems,
-    pageInfo: {
-      hasNextPage: hasExtraRow,
-      hasPreviousPage: hasPrev,
-      startCursor,
-      endCursor,
-      count: paginatedItems.length,
-    },
-  };
 }
 
 /**

@@ -9,7 +9,6 @@ import {
   PaginatedServiceRequestsResponseDTO,
   CursorPaginatedServiceRequestsResponseDTO,
 } from "../types/service-request.types";
-import { PaginationMeta } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";

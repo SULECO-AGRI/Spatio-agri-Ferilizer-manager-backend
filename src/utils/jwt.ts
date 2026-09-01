@@ -1,15 +1,14 @@
 import jwt from "jsonwebtoken";
 import { JwtPayload } from "../types/auth.types";
 
-const isProduction = process.env.NODE_ENV === "production";
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Fail-fast security guard: Never allow undefined JWT_SECRET in production
-if (isProduction && !JWT_SECRET) {
-  throw new Error("FATAL: JWT_SECRET environment variable is missing in production.");
+// Fail-fast security guard: Ensure JWT_SECRET is explicitly configured
+if (!JWT_SECRET) {
+  throw new Error("FATAL: JWT_SECRET environment variable is missing.");
 }
 
-const secretKey = JWT_SECRET || "default_development_jwt_secret_key_123456789";
+const secretKey = JWT_SECRET;
 const DEFAULT_JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 /**

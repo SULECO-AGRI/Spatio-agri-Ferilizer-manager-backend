@@ -12,7 +12,6 @@ import { AppError } from "../utils/AppError";
 import { hashPassword, comparePassword } from "../utils/password";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SRI_LANKA_MOBILE_REGEX = /^(?:0|94|\+94)?7[0-9]{8}$/;
 
 interface UserWithRelations {
   userId: number;

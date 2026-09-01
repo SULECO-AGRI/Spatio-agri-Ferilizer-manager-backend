@@ -8,7 +8,6 @@ import {
   PilotPerformanceTableRowDTO,
   PaginatedPilotPerformanceTableResponseDTO,
 } from "../types/admin-analytics.types";
-import { PaginationMeta } from "../types/farmer.types";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import {
   MissionStatus,
@@ -374,8 +373,6 @@ export class AdminAnalyticsService {
         },
       }),
     ]);
-
-    const totalPages = Math.ceil(total / limit) || 1;
 
     const items: PilotPerformanceTableRowDTO[] = pilots.map((pilot) => {
       const profile = pilot.pilotProfile;
