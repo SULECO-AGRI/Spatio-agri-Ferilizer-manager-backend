@@ -5,6 +5,7 @@ import {
   SERVICE_REQUEST_CACHE_TTL,
 } from "../services/service-request-cache.service";
 import { PilotCacheService } from "../services/pilot-cache.service";
+import { FarmerCacheService } from "../services/farmer-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
@@ -26,10 +27,13 @@ export class ServiceRequestController {
         req.body
       );
 
-      // Event-driven cache purging on new request creation
-      ServiceRequestCacheService.invalidateServiceRequestCaches(
-        result.requestId
-      ).catch((err) => {
+      // Event-driven cache purging on new request creation (service requests & farmer caches)
+      Promise.allSettled([
+        ServiceRequestCacheService.invalidateServiceRequestCaches(
+          result.requestId
+        ),
+        FarmerCacheService.invalidateFarmerCaches(req.user.userId),
+      ]).catch((err) => {
         console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
       });
 
@@ -150,6 +154,7 @@ export class ServiceRequestController {
       Promise.allSettled([
         ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
         PilotCacheService.invalidatePilotCaches(req.body.pilotId),
+        FarmerCacheService.invalidateFarmerCaches(),
       ]).catch((err) => {
         console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
       });
@@ -176,9 +181,10 @@ export class ServiceRequestController {
       );
 
       // Event-driven cache purging on status lifecycle transition
-      ServiceRequestCacheService.invalidateServiceRequestCaches(
-        requestId
-      ).catch((err) => {
+      Promise.allSettled([
+        ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
+        FarmerCacheService.invalidateFarmerCaches(),
+      ]).catch((err) => {
         console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
       });
 

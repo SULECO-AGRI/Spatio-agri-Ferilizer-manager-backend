@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AuthService } from "../services/auth.service";
 import { PilotCacheService } from "../services/pilot-cache.service";
+import { FarmerCacheService } from "../services/farmer-cache.service";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 import { sendSuccess, sendCreated } from "../utils/response";
@@ -12,6 +13,12 @@ export class AuthController {
   public static registerFarmer = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await AuthService.registerFarmer(req.body);
+
+      // Invalidate farmer directory list caches on new farmer registration
+      FarmerCacheService.invalidateFarmerCaches().catch((err) => {
+        console.warn("[AuthController] Cache invalidation warning:", err.message);
+      });
+
       sendCreated(res, result, "Farmer registered successfully.");
     }
   );

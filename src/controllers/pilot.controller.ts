@@ -5,6 +5,7 @@ import {
   PILOT_CACHE_TTL,
 } from "../services/pilot-cache.service";
 import { ServiceRequestCacheService } from "../services/service-request-cache.service";
+import { FarmerCacheService } from "../services/farmer-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendSuccess, sendPaginated } from "../utils/response";
@@ -117,10 +118,11 @@ export class PilotController {
         req.user
       );
 
-      // Invalidate both pilot and service request caches
+      // Invalidate pilot, service request, and farmer caches
       Promise.allSettled([
         PilotCacheService.invalidatePilotCaches(pilotId),
         ServiceRequestCacheService.invalidateServiceRequestCaches(),
+        FarmerCacheService.invalidateFarmerCaches(),
       ]).catch((err) => {
         console.warn("[PilotController] Cache invalidation warning:", err.message);
       });
@@ -146,10 +148,11 @@ export class PilotController {
         req.user
       );
 
-      // Invalidate both pilot and service request caches
+      // Invalidate pilot, service request, and farmer caches
       Promise.allSettled([
         PilotCacheService.invalidatePilotCaches(pilotId),
         ServiceRequestCacheService.invalidateServiceRequestCaches(),
+        FarmerCacheService.invalidateFarmerCaches(),
       ]).catch((err) => {
         console.warn("[PilotController] Cache invalidation warning:", err.message);
       });
