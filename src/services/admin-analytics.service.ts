@@ -9,6 +9,7 @@ import {
   PaginatedPilotPerformanceTableResponseDTO,
 } from "../types/admin-analytics.types";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
+import { getDateRanges } from "../utils/date";
 import {
   MissionStatus,
   PilotStatus,
@@ -17,32 +18,12 @@ import {
 
 export class AdminAnalyticsService {
   /**
-   * Helper: Date Boundaries for Today, This Month, and Last Month
-   */
-  private static getDateRanges() {
-    const now = new Date();
 
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
-    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-
-    return {
-      startOfToday,
-      startOfThisMonth,
-      startOfLastMonth,
-      endOfLastMonth,
-    };
-  }
-
-  /**
    * 1. GET COMPLETED MISSIONS ANALYTICS
    */
   public static async getCompletedMissionsAnalytics(): Promise<CompletedMissionsAnalyticsDTO> {
     const { startOfToday, startOfThisMonth, startOfLastMonth, endOfLastMonth } =
-      this.getDateRanges();
+      getDateRanges();
 
     const [
       totalCompletedMissions,
@@ -102,7 +83,7 @@ export class AdminAnalyticsService {
    */
   public static async getRevenueAnalytics(): Promise<RevenueAnalyticsDTO> {
     const { startOfThisMonth, startOfLastMonth, endOfLastMonth } =
-      this.getDateRanges();
+      getDateRanges();
 
     const [
       allPaymentsAgg,
@@ -239,7 +220,7 @@ export class AdminAnalyticsService {
    */
   public static async getFarmerGrowth(): Promise<FarmerGrowthAnalyticsDTO> {
     const { startOfThisMonth, startOfLastMonth, endOfLastMonth } =
-      this.getDateRanges();
+      getDateRanges();
 
     const [
       totalFarmers,

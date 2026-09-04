@@ -333,61 +333,12 @@ export class ServiceRequestService {
       }).then((r) => r.data),
     ]);
 
-    const items: ServiceRequestListItemDTO[] = requests.map((req) => {
-      const farmerUser = req.field.farmer.user;
-      const latestMission = req.missions[0] || null;
-      const assignedPilot =
-        latestMission && latestMission.pilot
-          ? {
-              userId: latestMission.pilot.userId,
-              fullName: `${latestMission.pilot.user.firstName} ${latestMission.pilot.user.lastName}`.trim(),
-              mobile: latestMission.pilot.user.mobile,
-              licenceNumber: latestMission.pilot.licenceNumber,
-              status: latestMission.pilot.status,
-            }
-          : null;
-
-      return {
-        requestId: req.requestId,
-        requestCode: req.requestCode,
-        serviceType: req.serviceType,
-        preferredDate: req.preferredDate,
-        priority: req.priority,
-        status: req.status,
-        estimatedCost: Number(req.estimatedCost),
-        farmer: {
-          userId: farmerUser.userId,
-          fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
-          email: farmerUser.email,
-          mobile: farmerUser.mobile,
-          nic: req.field.farmer.nic,
-          address: req.field.farmer.address,
-        },
-        field: {
-          id: req.field.id,
-          fieldName: req.field.fieldName,
-          cropType: req.field.cropType,
-          area: Number(req.field.area),
-          district: req.field.district,
-          province: req.field.province,
-          city: req.field.city,
-          village: req.field.village,
-        },
-        assignedPilot,
-        mission: latestMission
-          ? {
-              missionId: latestMission.missionId,
-              status: latestMission.status,
-              startedAt: latestMission.startedAt,
-              completedAt: latestMission.completedAt,
-            }
-          : null,
-        createdAt: req.createdAt,
-        updatedAt: req.updatedAt,
-      };
-    });
+    const items: ServiceRequestListItemDTO[] = requests.map((req) =>
+      this.mapToListItemDTO(req)
+    );
 
     const pagination = buildPaginationMeta(total, page, limit);
+
 
     return {
       requests: items,
@@ -590,61 +541,12 @@ export class ServiceRequestService {
       rawResultRows.reverse();
     }
 
-    const items: ServiceRequestListItemDTO[] = rawResultRows.map((req) => {
-      const farmerUser = req.field.farmer.user;
-      const latestMission = req.missions[0] || null;
-      const assignedPilot =
-        latestMission && latestMission.pilot
-          ? {
-              userId: latestMission.pilot.userId,
-              fullName: `${latestMission.pilot.user.firstName} ${latestMission.pilot.user.lastName}`.trim(),
-              mobile: latestMission.pilot.user.mobile,
-              licenceNumber: latestMission.pilot.licenceNumber,
-              status: latestMission.pilot.status,
-            }
-          : null;
-
-      return {
-        requestId: req.requestId,
-        requestCode: req.requestCode,
-        serviceType: req.serviceType,
-        preferredDate: req.preferredDate,
-        priority: req.priority,
-        status: req.status,
-        estimatedCost: Number(req.estimatedCost),
-        farmer: {
-          userId: farmerUser.userId,
-          fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
-          email: farmerUser.email,
-          mobile: farmerUser.mobile,
-          nic: req.field.farmer.nic,
-          address: req.field.farmer.address,
-        },
-        field: {
-          id: req.field.id,
-          fieldName: req.field.fieldName,
-          cropType: req.field.cropType,
-          area: Number(req.field.area),
-          district: req.field.district,
-          province: req.field.province,
-          city: req.field.city,
-          village: req.field.village,
-        },
-        assignedPilot,
-        mission: latestMission
-          ? {
-              missionId: latestMission.missionId,
-              status: latestMission.status,
-              startedAt: latestMission.startedAt,
-              completedAt: latestMission.completedAt,
-            }
-          : null,
-        createdAt: req.createdAt,
-        updatedAt: req.updatedAt,
-      };
-    });
+    const items: ServiceRequestListItemDTO[] = rawResultRows.map((req) =>
+      this.mapToListItemDTO(req)
+    );
 
     const startCursor =
+
       items.length > 0
         ? encodeCursor({
             id: items[0].requestId,
@@ -1196,4 +1098,62 @@ export class ServiceRequestService {
       total,
     };
   }
+
+  /**
+   * Helper: Maps raw Prisma service request record to ServiceRequestListItemDTO
+   */
+  private static mapToListItemDTO(req: any): ServiceRequestListItemDTO {
+    const farmerUser = req.field.farmer.user;
+    const latestMission = req.missions?.[0] || null;
+    const assignedPilot =
+      latestMission && latestMission.pilot
+        ? {
+            userId: latestMission.pilot.userId,
+            fullName: `${latestMission.pilot.user.firstName} ${latestMission.pilot.user.lastName}`.trim(),
+            mobile: latestMission.pilot.user.mobile,
+            licenceNumber: latestMission.pilot.licenceNumber,
+            status: latestMission.pilot.status,
+          }
+        : null;
+
+    return {
+      requestId: req.requestId,
+      requestCode: req.requestCode,
+      serviceType: req.serviceType,
+      preferredDate: req.preferredDate,
+      priority: req.priority,
+      status: req.status,
+      estimatedCost: Number(req.estimatedCost),
+      farmer: {
+        userId: farmerUser.userId,
+        fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
+        email: farmerUser.email,
+        mobile: farmerUser.mobile,
+        nic: req.field.farmer.nic,
+        address: req.field.farmer.address,
+      },
+      field: {
+        id: req.field.id,
+        fieldName: req.field.fieldName,
+        cropType: req.field.cropType,
+        area: Number(req.field.area),
+        district: req.field.district,
+        province: req.field.province,
+        city: req.field.city,
+        village: req.field.village,
+      },
+      assignedPilot,
+      mission: latestMission
+        ? {
+            missionId: latestMission.missionId,
+            status: latestMission.status,
+            startedAt: latestMission.startedAt,
+            completedAt: latestMission.completedAt,
+          }
+        : null,
+      createdAt: req.createdAt,
+      updatedAt: req.updatedAt,
+    };
+  }
 }
+

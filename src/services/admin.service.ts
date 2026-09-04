@@ -5,6 +5,7 @@ import {
   TodayScheduleItemDTO,
   AdminDashboardOverviewDTO,
 } from "../types/admin.types";
+import { getTodayBounds } from "../utils/date";
 import {
   RequestStatus,
   RequestPriority,
@@ -15,20 +16,8 @@ import {
 
 export class AdminService {
   /**
-   * Helper: Get Start and End timestamps of Today
-   */
-  private static getTodayBounds(): { startOfDay: Date; endOfDay: Date } {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    return { startOfDay, endOfDay };
-  }
-
-  /**
    * 1. GET DASHBOARD METRICS & KPIS
+
    * - Number of pending requests
    * - Number of active missions
    * - Number of available pilots
@@ -38,8 +27,9 @@ export class AdminService {
   public static async getMetrics(
     periodDays: number = 90
   ): Promise<DashboardMetricsDTO> {
-    const { startOfDay, endOfDay } = this.getTodayBounds();
+    const { startOfDay, endOfDay } = getTodayBounds();
     const days = Math.max(1, Math.min(365, periodDays));
+
     const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     const [
@@ -322,7 +312,7 @@ export class AdminService {
       endOfDay = new Date(filters.date);
       endOfDay.setHours(23, 59, 59, 999);
     } else {
-      const bounds = this.getTodayBounds();
+      const bounds = getTodayBounds();
       startOfDay = bounds.startOfDay;
       endOfDay = bounds.endOfDay;
     }

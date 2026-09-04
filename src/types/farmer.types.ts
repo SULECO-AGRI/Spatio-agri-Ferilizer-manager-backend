@@ -1,16 +1,7 @@
-export interface PaginationMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
-}
+import { PaginationMeta, PaginatedResult } from "./common.types";
+export { PaginationMeta, PaginatedResult };
 
-export interface PaginatedResult<T> {
-  items: T[];
-  pagination: PaginationMeta;
-}
+
 
 export interface FarmerQueryDTO {
   page?: number;

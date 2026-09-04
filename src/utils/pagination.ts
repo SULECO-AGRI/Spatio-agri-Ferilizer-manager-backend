@@ -1,15 +1,7 @@
-import { PaginationMeta } from "../types/farmer.types";
+import { PaginationMeta, PageInfo } from "../types/common.types";
 
-/**
- * Standard PageInfo for Keyset/Cursor-paginated APIs
- */
-export interface PageInfo {
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-  startCursor: string | null;
-  endCursor: string | null;
-  count: number;
-}
+export { PageInfo };
+
 
 /**
  * Encodes an opaque, URL-safe Base64 cursor string
