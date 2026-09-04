@@ -177,3 +177,29 @@ export const pilotReviewQuerySchema = z.object({
       message: "maxRating must be between 1 and 5",
     }),
 });
+
+/**
+ * 9. Path Parameter: Single Mission ID
+ */
+export const missionIdParamSchema = z.object({
+  missionId: z
+    .string()
+    .regex(/^\d+$/, "Mission ID must be a valid numeric integer")
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, { message: "Mission ID must be greater than zero" }),
+});
+
+/**
+ * 10. Body Schema: Pilot Mission Response (Accept / Reject)
+ */
+export const respondMissionSchema = z.object({
+  action: z.enum(["ACCEPT", "REJECT"], {
+    message: "Action must be either 'ACCEPT' or 'REJECT'",
+  }),
+  rejectionReason: z
+    .string()
+    .max(1000, "Rejection reason cannot exceed 1000 characters")
+    .optional()
+    .transform((val) => (val ? val.trim() : undefined)),
+});
+

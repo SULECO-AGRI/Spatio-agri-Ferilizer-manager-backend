@@ -10,13 +10,15 @@ import {
   PilotPayoutsResponseDTO,
   PilotReviewQueryDTO,
   PilotReviewItemDTO,
+  RespondMissionDTO,
+  RespondMissionResponseDTO,
 } from "../types/pilot.types";
 import { PaginatedResult } from "../types/farmer.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
-import { PilotStatus, MissionStatus, PayoutStatus } from "../generated/prisma/enums";
+import { PilotStatus, MissionStatus, PayoutStatus, RequestStatus } from "../generated/prisma/enums";
 
 export class PilotService {
   /**
@@ -810,4 +812,139 @@ export class PilotService {
 
     return { items, pagination };
   }
+
+  /**
+   * 9. PILOT RESPONSE FLOW (Accept or Reject Assigned Mission)
+   * Enforces IDOR security (Pilot must be assigned to this mission), performs atomic state transition,
+   * resets request to PENDING upon REJECT so admins can reassign, and records an activity audit trail.
+   */
+  public static async respondToMission(
+    missionId: number,
+    dto: RespondMissionDTO,
+    requestUser?: JwtPayload
+  ): Promise<RespondMissionResponseDTO> {
+    if (!requestUser) {
+      throw AppError.unauthorized("Authentication required.");
+    }
+
+    // 1. Fetch mission with service request
+    const mission = await prisma.mission.findUnique({
+      where: { missionId },
+      include: {
+        serviceRequest: true,
+        pilot: {
+          include: {
+            user: {
+              select: {
+                userId: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!mission) {
+      throw AppError.notFound(`Mission with ID ${missionId} not found.`);
+    }
+
+    const userRole = requestUser.role.toLowerCase();
+
+    // 2. IDOR Security Guard: Verify caller is the assigned pilot (or Admin)
+    if (userRole === "pilot" && mission.pilotId !== requestUser.userId) {
+      throw AppError.forbidden(
+        "Access denied. You can only accept or reject missions specifically assigned to your pilot profile."
+      );
+    }
+
+    // 3. Verify mission is in respondable state (SCHEDULED)
+    if (mission.status !== MissionStatus.SCHEDULED) {
+      throw AppError.badRequest(
+        `Cannot respond to mission. Current mission status is '${mission.status}'. Only SCHEDULED missions can be accepted or rejected.`
+      );
+    }
+
+    const respondedAt = new Date();
+
+    if (dto.action === "ACCEPT") {
+      // Pilot accepts the mission assignment
+      await prisma.$transaction(async (tx) => {
+        await tx.mission.update({
+          where: { missionId },
+          data: {
+            status: MissionStatus.SCHEDULED,
+          },
+        });
+
+        await tx.serviceRequest.update({
+          where: { requestId: mission.requestId },
+          data: {
+            status: RequestStatus.ASSIGNED,
+          },
+        });
+      });
+
+      logActivity({
+        userId: requestUser.userId,
+        action: "MISSION_ACCEPTED",
+        entityType: "MISSION",
+        entityId: missionId,
+        details: `Pilot ${requestUser.email} ACCEPTED mission #${missionId} for request ${mission.serviceRequest.requestCode}.`,
+      });
+
+      return {
+        missionId,
+        requestId: mission.requestId,
+        action: "ACCEPT",
+        missionStatus: MissionStatus.SCHEDULED,
+        requestStatus: RequestStatus.ASSIGNED,
+        message: "Mission assignment accepted successfully. Proceed to scheduled flight execution.",
+        respondedAt,
+      };
+    } else {
+      // Pilot rejects the mission assignment: Reset service request to PENDING so dispatchers can reassign
+      const rejectionNote = dto.rejectionReason
+        ? `Pilot Rejected: ${dto.rejectionReason}`
+        : "Rejected by assigned pilot without additional notes.";
+
+      await prisma.$transaction(async (tx) => {
+        await tx.mission.update({
+          where: { missionId },
+          data: {
+            status: MissionStatus.FAILED,
+            pilotNotes: rejectionNote,
+          },
+        });
+
+        await tx.serviceRequest.update({
+          where: { requestId: mission.requestId },
+          data: {
+            status: RequestStatus.PENDING,
+          },
+        });
+      });
+
+      logActivity({
+        userId: requestUser.userId,
+        action: "MISSION_REJECTED",
+        entityType: "MISSION",
+        entityId: missionId,
+        details: `Pilot ${requestUser.email} REJECTED mission #${missionId} for request ${mission.serviceRequest.requestCode}. Reason: ${dto.rejectionReason || "None provided"}. Request status reset to PENDING.`,
+      });
+
+      return {
+        missionId,
+        requestId: mission.requestId,
+        action: "REJECT",
+        missionStatus: MissionStatus.FAILED,
+        requestStatus: RequestStatus.PENDING,
+        message: "Mission assignment rejected. Service request has been returned to PENDING status for reassignment.",
+        respondedAt,
+      };
+    }
+  }
 }
+

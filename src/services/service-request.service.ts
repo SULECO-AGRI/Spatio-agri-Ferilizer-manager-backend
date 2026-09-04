@@ -9,12 +9,20 @@ import {
   ServiceRequestDetailDTO,
   PaginatedServiceRequestsResponseDTO,
   CursorPaginatedServiceRequestsResponseDTO,
+  CandidatePilotDTO,
+  CandidatePilotsResponseDTO,
 } from "../types/service-request.types";
 import { JwtPayload } from "../types/auth.types";
 import {
   ServiceRequestCacheService,
   SERVICE_REQUEST_CACHE_TTL,
 } from "./service-request-cache.service";
+import {
+  extractFieldCentroid,
+  calculateHaversineDistance,
+  calculatePilotMatchScore,
+  DEFAULT_BASE_COORDINATES,
+} from "./pilot-ranking.service";
 import { CacheService } from "../utils/cache";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
@@ -32,20 +40,26 @@ import {
   PilotStatus,
 } from "../generated/prisma/enums";
 
+
 export class ServiceRequestService {
   /**
-   * 1. CREATE SERVICE REQUEST (Farmer Only)
+   * 1. CREATE SERVICE REQUEST (Farmer or Admin on behalf of Farmer)
    */
   public static async createServiceRequest(
-    farmerUserId: number,
-    dto: CreateServiceRequestDTO
+    userId: number,
+    dto: CreateServiceRequestDTO,
+    requestUser?: JwtPayload
   ): Promise<ServiceRequestListItemDTO> {
-    // 1. Verify field exists and belongs to the authenticated farmer (IDOR defense)
+    const userRole = requestUser?.role?.toLowerCase() || "farmer";
+
+    // 1. Verify field exists and belongs to the authenticated farmer (if farmer)
+    const whereClause: any = { id: dto.fieldId };
+    if (userRole === "farmer") {
+      whereClause.farmerId = userId;
+    }
+
     const field = await prisma.field.findFirst({
-      where: {
-        id: dto.fieldId,
-        farmerId: farmerUserId,
-      },
+      where: whereClause,
       include: {
         farmer: {
           include: {
@@ -65,9 +79,12 @@ export class ServiceRequestService {
 
     if (!field) {
       throw AppError.notFound(
-        `Field with ID ${dto.fieldId} not found or does not belong to your account.`
+        userRole === "farmer"
+          ? `Field with ID ${dto.fieldId} not found or does not belong to your account.`
+          : `Field with ID ${dto.fieldId} not found.`
       );
     }
+
 
     // 2. Calculate estimated cost if not specified (Standard agricultural rate: LKR 2,500/acre)
     const areaVal = Number(field.area) || 1;
@@ -117,12 +134,13 @@ export class ServiceRequestService {
 
     // Log persistent audit trail
     logActivity({
-      userId: farmerUserId,
+      userId,
       action: "REQUEST_CREATED",
       entityType: "SERVICE_REQUEST",
       entityId: newRequest.requestId,
       details: `Service request ${newRequest.requestCode} created for ${newRequest.field.fieldName} (${newRequest.field.cropType}).`,
     });
+
 
     return {
       requestId: newRequest.requestId,
@@ -822,14 +840,149 @@ export class ServiceRequestService {
   }
 
   /**
-   * 4. ASSIGN PILOT TO SERVICE REQUEST & SCHEDULE MISSION (Admin Only)
+   * 4. PILOT RECOMMENDATION & RANKING ENGINE (Admin Only)
+   * Evaluates active pilots, filters conflict dates, computes Haversine distances & multi-factor match scores.
+   */
+  public static async getCandidatePilots(
+    requestId: number,
+    requestUser?: JwtPayload
+  ): Promise<CandidatePilotsResponseDTO> {
+    if (!requestUser) {
+      throw AppError.unauthorized("Authentication required.");
+    }
+
+    const userRole = requestUser.role.toLowerCase();
+    if (userRole !== "admin") {
+      throw AppError.forbidden("Access denied. Pilot recommendation is restricted to Administrators.");
+    }
+
+    // 1. Fetch service request along with field and farmer context
+    const serviceRequest = await prisma.serviceRequest.findUnique({
+      where: { requestId },
+      include: {
+        field: true,
+      },
+    });
+
+    if (!serviceRequest) {
+      throw AppError.notFound(`Service request with ID ${requestId} not found.`);
+    }
+
+    // 2. Extract field centroid coordinates
+    const fieldCentroid = extractFieldCentroid(
+      serviceRequest.field.locationCoordinates,
+      serviceRequest.field.district
+    );
+
+    // 3. Preferred date normalization for flight conflict check
+    const preferredDate = new Date(serviceRequest.preferredDate);
+    const dayStart = new Date(preferredDate);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(preferredDate);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+
+    // 4. Query all active pilots
+    const activePilots = await prisma.user.findMany({
+      where: {
+        role: { name: "Pilot" },
+        pilotProfile: {
+          status: PilotStatus.ACTIVE,
+        },
+      },
+      include: {
+        pilotProfile: true,
+        assignedMissions: {
+          where: {
+            status: {
+              in: [MissionStatus.SCHEDULED, MissionStatus.IN_PROGRESS],
+            },
+            serviceRequest: {
+              preferredDate: {
+                gte: dayStart,
+                lte: dayEnd,
+              },
+            },
+          },
+          select: { missionId: true },
+        },
+      },
+    });
+
+    // 5. Filter out pilots who already have an active/scheduled mission on the same preferred date
+    const availablePilots = activePilots.filter(
+      (pilot) => !pilot.assignedMissions || pilot.assignedMissions.length === 0
+    );
+
+    // 6. Compute distance & composite match score for each candidate
+    const candidates: CandidatePilotDTO[] = availablePilots.map((pilot) => {
+      const profile = pilot.pilotProfile!;
+      const pilotBaseCoords = DEFAULT_BASE_COORDINATES;
+
+      const distanceKm = calculateHaversineDistance(
+        fieldCentroid.lat,
+        fieldCentroid.lng,
+        pilotBaseCoords.lat,
+        pilotBaseCoords.lng
+      );
+
+      const ratingNum = profile.ratings !== null && profile.ratings !== undefined ? Number(profile.ratings) : 5.0;
+      const completedMissions = profile.completedMissions || 0;
+      const totalFlightHours = Number(profile.totalFlightHours || 0);
+
+      const { matchScore, breakdown } = calculatePilotMatchScore({
+        distanceKm,
+        rating: ratingNum,
+        completedMissions,
+        totalFlightHours,
+      });
+
+      return {
+        pilotId: pilot.userId,
+        fullName: `${pilot.firstName} ${pilot.lastName}`.trim(),
+        email: pilot.email,
+        mobile: pilot.mobile,
+        licenceNumber: profile.licenceNumber,
+        status: profile.status,
+        rating: ratingNum,
+        distanceKm,
+        completedMissions,
+        totalFlightHours,
+        matchScore,
+        scoreBreakdown: breakdown,
+      };
+    });
+
+    // 7. Sort candidates descending by composite matchScore (highest score first)
+    candidates.sort((a, b) => b.matchScore - a.matchScore);
+
+    return {
+      requestId: serviceRequest.requestId,
+      requestCode: serviceRequest.requestCode,
+      preferredDate: serviceRequest.preferredDate,
+      field: {
+        id: serviceRequest.field.id,
+        fieldName: serviceRequest.field.fieldName,
+        cropType: serviceRequest.field.cropType,
+        area: Number(serviceRequest.field.area),
+        district: serviceRequest.field.district,
+        province: serviceRequest.field.province,
+        city: serviceRequest.field.city,
+        coordinates: fieldCentroid,
+      },
+      totalCandidates: candidates.length,
+      candidates,
+    };
+  }
+
+  /**
+   * 5. ASSIGN PILOT TO SERVICE REQUEST & SCHEDULE MISSION (Admin Only)
    */
   public static async assignPilot(
     requestId: number,
     adminUserId: number,
     dto: AssignPilotDTO
   ): Promise<ServiceRequestDetailDTO> {
-    // 1. Verify service request exists and is in assignable state
+    // 1. Verify service request exists and is strictly in PENDING state
     const serviceRequest = await prisma.serviceRequest.findUnique({
       where: { requestId },
       include: { missions: true },
@@ -839,17 +992,13 @@ export class ServiceRequestService {
       throw AppError.notFound(`Service request with ID ${requestId} not found.`);
     }
 
-    if (
-      serviceRequest.status === RequestStatus.COMPLETED ||
-      serviceRequest.status === RequestStatus.CANCELLED ||
-      serviceRequest.status === RequestStatus.REJECTED
-    ) {
+    if (serviceRequest.status !== RequestStatus.PENDING) {
       throw AppError.badRequest(
-        `Cannot assign pilot. Service request is already in '${serviceRequest.status}' state.`
+        `Cannot assign pilot. Service request must be in 'PENDING' status (current status: '${serviceRequest.status}').`
       );
     }
 
-    // 2. Verify pilot exists and is not suspended
+    // 2. Verify pilot exists and is active/not suspended
     const pilot = await prisma.user.findFirst({
       where: {
         userId: dto.pilotId,
@@ -864,6 +1013,12 @@ export class ServiceRequestService {
 
     if (pilot.pilotProfile.status === PilotStatus.SUSPENDED) {
       throw AppError.badRequest("Cannot assign a suspended pilot to a mission.");
+    }
+
+    if (pilot.pilotProfile.status !== PilotStatus.ACTIVE) {
+      throw AppError.badRequest(
+        `Cannot assign pilot. Pilot profile is '${pilot.pilotProfile.status}' (must be 'ACTIVE').`
+      );
     }
 
     // 3. Atomic state transition: Schedule mission and update request status to ASSIGNED

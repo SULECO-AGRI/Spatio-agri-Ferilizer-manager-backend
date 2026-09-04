@@ -24,7 +24,8 @@ export class ServiceRequestController {
 
       const result = await ServiceRequestService.createServiceRequest(
         req.user.userId,
-        req.body
+        req.body,
+        req.user
       );
 
       // Event-driven cache purging on new request creation (service requests & farmer caches)
@@ -130,6 +131,28 @@ export class ServiceRequestController {
       }
 
       sendSuccess(res, { serviceRequest: result });
+    }
+  );
+
+  /**
+   * GET /service-requests/:id/candidate-pilots
+   * GET /admin/service-requests/:id/candidate-pilots
+   * Intelligent pilot recommendation & ranking with distance, rating and experience weighting
+   * Private (Admin Only)
+   */
+  public static getCandidatePilots = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const requestId = Number(req.params.id);
+      const result = await ServiceRequestService.getCandidatePilots(
+        requestId,
+        req.user
+      );
+
+      sendSuccess(
+        res,
+        result,
+        "Candidate pilots recommended and ranked successfully."
+      );
     }
   );
 

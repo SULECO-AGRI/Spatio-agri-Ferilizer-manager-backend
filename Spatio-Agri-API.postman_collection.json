@@ -708,6 +708,72 @@
           "response": []
         },
         {
+          "name": "Respond to Mission - ACCEPT",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"ACCEPT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pilots/missions/1/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "missions", "1", "respond"]
+            },
+            "description": "Pilot accepts the scheduled mission assignment. Confirms Mission status as SCHEDULED and Service Request as ASSIGNED."
+          },
+          "response": []
+        },
+        {
+          "name": "Respond to Mission - REJECT",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"REJECT\",\n  \"rejectionReason\": \"Drone hardware maintenance scheduled during preferred operational window.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pilots/missions/1/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "missions", "1", "respond"]
+            },
+            "description": "Pilot rejects the scheduled mission assignment. Sets Mission status to FAILED, logs rejection notes, and resets Service Request back to PENDING for admin reassignment."
+          },
+          "response": []
+        },
+        {
           "name": "Start Mission",
           "request": {
             "auth": {
@@ -862,7 +928,24 @@
       "name": "5. Service Requests & Mission Dispatch",
       "item": [
         {
-          "name": "Create Service Request (Farmer Only)",
+          "name": "Create Service Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.serviceRequest && jsonData.data.serviceRequest.requestId) {",
+                  "        pm.collectionVariables.set(\"requestId\", jsonData.data.serviceRequest.requestId);",
+                  "        console.log(\"Saved requestId: \" + jsonData.data.serviceRequest.requestId + \" to collection variables.\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
@@ -883,14 +966,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fieldId\": 1,\n  \"serviceType\": \"FERTILIZING\",\n  \"preferredDate\": \"2026-08-25\",\n  \"priority\": \"HIGH\",\n  \"estimatedCost\": 12500.00\n}"
+              "raw": "{\n  \"fieldId\": 1,\n  \"serviceType\": \"FERTILIZING\",\n  \"preferredDate\": \"2026-09-10\",\n  \"priority\": \"HIGH\",\n  \"estimatedCost\": 11250.00\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/service-requests",
+              "raw": "{{baseUrl}}/api/service-requests",
               "host": ["{{baseUrl}}"],
-              "path": ["service-requests"]
+              "path": ["api", "service-requests"]
             },
-            "description": "Farmers submit new precision spraying requests for registered fields. Generates unique requestCode and sets status to PENDING."
+            "description": "Submit a new precision spraying request for a registered field. Generates unique requestCode (REQ-YYYY-XXXXX) and sets initial lifecycle status to PENDING."
           },
           "response": []
         },
@@ -989,6 +1072,30 @@
               "path": ["service-requests", "1"]
             },
             "description": "Fetches detailed service request data including complete farmer profile, field polygon geo-coordinates, scheduled missions, and payments."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Candidate Pilots (Intelligent Ranking Engine)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/service-requests/1/candidate-pilots",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "service-requests", "1", "candidate-pilots"]
+            },
+            "description": "Admin retrieves intelligent pilot recommendations ranked by composite match score: Distance (45%), Customer Rating (35%), and Experience (20%). Filters out pilots with conflicting missions on the preferred date."
           },
           "response": []
         },

@@ -26,7 +26,7 @@ router.use(authenticate);
  */
 router.post(
   "/",
-  authorize("Farmer"),
+  authorize("Farmer", "Admin"),
   validateBody(createServiceRequestSchema),
   ServiceRequestController.createServiceRequest
 );
@@ -64,6 +64,18 @@ router.get(
   authorize("Admin", "Farmer", "Pilot"),
   validateParams(serviceRequestIdParamSchema),
   ServiceRequestController.getServiceRequestById
+);
+
+/**
+ * @route   GET /service-requests/:id/candidate-pilots
+ * @desc    Get recommended and ranked candidate pilots for a service request
+ * @access  Private (Admin Only)
+ */
+router.get(
+  "/:id/candidate-pilots",
+  authorize("Admin"),
+  validateParams(serviceRequestIdParamSchema),
+  ServiceRequestController.getCandidatePilots
 );
 
 /**

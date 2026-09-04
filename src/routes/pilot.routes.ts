@@ -9,13 +9,16 @@ import {
 import {
   pilotIdParamSchema,
   pilotMissionParamsSchema,
+  missionIdParamSchema,
   pilotListQuerySchema,
   updatePilotStatusSchema,
   pilotMissionQuerySchema,
   completeMissionSchema,
+  respondMissionSchema,
   pilotPayoutQuerySchema,
   pilotReviewQuerySchema,
 } from "../validations/pilot.validation";
+
 
 const router = Router();
 
@@ -96,6 +99,33 @@ router.patch(
   validateBody(completeMissionSchema),
   PilotController.completeMission
 );
+
+/**
+ * @route   POST /pilots/missions/:missionId/respond
+ * @desc    Pilot responds to assigned mission (Accept or Reject)
+ * @access  Private (Admin or Assigned Pilot)
+ */
+router.post(
+  "/missions/:missionId/respond",
+  authorize("Admin", "Pilot"),
+  validateParams(missionIdParamSchema),
+  validateBody(respondMissionSchema),
+  PilotController.respondToMission
+);
+
+/**
+ * @route   POST /pilots/:id/missions/:missionId/respond
+ * @desc    Pilot responds to assigned mission with pilotId in path (Accept or Reject)
+ * @access  Private (Admin or Assigned Pilot)
+ */
+router.post(
+  "/:id/missions/:missionId/respond",
+  authorize("Admin", "Pilot"),
+  validateParams(pilotMissionParamsSchema),
+  validateBody(respondMissionSchema),
+  PilotController.respondToMission
+);
+
 
 /**
  * @route   GET /pilots/:id/payouts

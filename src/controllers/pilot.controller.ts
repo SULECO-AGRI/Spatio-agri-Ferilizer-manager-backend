@@ -216,4 +216,33 @@ export class PilotController {
       sendPaginated(res, "reviews", result.items, result.pagination);
     }
   );
+
+  /**
+   * POST /pilots/missions/:missionId/respond
+   * POST /pilot/missions/:missionId/respond
+   * Pilot response to assigned mission (Accept or Reject)
+   * Private (Assigned Pilot Only)
+   */
+  public static respondToMission = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const missionId = Number(req.params.missionId);
+      const result = await PilotService.respondToMission(
+        missionId,
+        req.body,
+        req.user
+      );
+
+      // Invalidate service request, pilot, and farmer caches
+      Promise.allSettled([
+        ServiceRequestCacheService.invalidateServiceRequestCaches(result.requestId),
+        PilotCacheService.invalidatePilotCaches(req.user?.userId),
+        FarmerCacheService.invalidateFarmerCaches(),
+      ]).catch((err) => {
+        console.warn("[PilotController] Cache invalidation warning:", err.message);
+      });
+
+      sendSuccess(res, result, result.message);
+    }
+  );
 }
+

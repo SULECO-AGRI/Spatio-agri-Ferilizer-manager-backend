@@ -26,7 +26,6 @@ export const createServiceRequestSchema = z.object({
     .default("FERTILIZING"),
   preferredDate: z
     .string({ message: "preferredDate is required" })
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "preferredDate must be in YYYY-MM-DD format")
     .refine(
       (val) => {
         const date = new Date(val);
@@ -34,8 +33,9 @@ export const createServiceRequestSchema = z.object({
         today.setHours(0, 0, 0, 0);
         return !isNaN(date.getTime()) && date >= today;
       },
-      { message: "preferredDate cannot be in the past" }
+      { message: "preferredDate must be a valid date format and cannot be in the past" }
     ),
+
   priority: z
     .enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"], {
       message: "priority must be one of: LOW, MEDIUM, HIGH, CRITICAL",

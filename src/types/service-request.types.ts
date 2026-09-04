@@ -183,3 +183,44 @@ export interface CursorPaginatedServiceRequestsResponseDTO {
   };
   pageInfo: PageInfo;
 }
+
+export interface CandidatePilotDTO {
+  pilotId: number;
+  fullName: string;
+  email: string;
+  mobile: string;
+  licenceNumber: string;
+  status: string;
+  rating: number;
+  distanceKm: number;
+  completedMissions: number;
+  totalFlightHours: number;
+  matchScore: number;
+  scoreBreakdown: {
+    distanceScore: number;
+    ratingScore: number;
+    experienceScore: number;
+  };
+}
+
+export interface CandidatePilotsResponseDTO {
+  requestId: number;
+  requestCode: string;
+  preferredDate: Date;
+  field: {
+    id: number;
+    fieldName: string;
+    cropType: string;
+    area: number;
+    district: string;
+    province: string;
+    city: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  totalCandidates: number;
+  candidates: CandidatePilotDTO[];
+}
+

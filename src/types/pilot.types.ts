@@ -166,3 +166,19 @@ export interface PilotPayoutsResponseDTO {
   };
   pagination: PaginationMeta;
 }
+
+export interface RespondMissionDTO {
+  action: "ACCEPT" | "REJECT";
+  rejectionReason?: string;
+}
+
+export interface RespondMissionResponseDTO {
+  missionId: number;
+  requestId: number;
+  action: "ACCEPT" | "REJECT";
+  missionStatus: string;
+  requestStatus: string;
+  message: string;
+  respondedAt: Date;
+}
+

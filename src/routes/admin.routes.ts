@@ -1,12 +1,21 @@
 import { Router } from "express";
 import { AdminController } from "../controllers/admin.controller";
+import { ServiceRequestController } from "../controllers/service-request.controller";
 import { authenticate, authorize } from "../middlewares/auth.middleware";
-import { validateQuery } from "../middlewares/validate.middleware";
+import {
+  validateParams,
+  validateQuery,
+  validateBody,
+} from "../middlewares/validate.middleware";
 import {
   adminMetricsQuerySchema,
   adminActivitiesQuerySchema,
   adminScheduleQuerySchema,
 } from "../validations/admin.validation";
+import {
+  serviceRequestIdParamSchema,
+  assignPilotSchema,
+} from "../validations/service-request.validation";
 
 const router = Router();
 
@@ -54,4 +63,28 @@ router.get(
   AdminController.getTodaySchedule
 );
 
+/**
+ * @route   GET /admin/service-requests/:id/candidate-pilots
+ * @desc    Get recommended and ranked candidate pilots for a service request
+ * @access  Private (Admin Only)
+ */
+router.get(
+  "/service-requests/:id/candidate-pilots",
+  validateParams(serviceRequestIdParamSchema),
+  ServiceRequestController.getCandidatePilots
+);
+
+/**
+ * @route   POST /admin/service-requests/:id/assign
+ * @desc    Assign pilot to service request and schedule mission
+ * @access  Private (Admin Only)
+ */
+router.post(
+  "/service-requests/:id/assign",
+  validateParams(serviceRequestIdParamSchema),
+  validateBody(assignPilotSchema),
+  ServiceRequestController.assignPilot
+);
+
 export default router;
+
