@@ -195,4 +195,24 @@ export class ServiceRequestController {
       );
     }
   );
+
+  /**
+   * GET /service-requests/counts
+   * Get aggregated service request status counts (pending, assigned, inProgress, completed, cancelled, rejected, total)
+   * Cache-Aside enabled with X-Cache header and RBAC tenancy scoping
+   */
+  public static getStatusCounts = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const cacheKey = ServiceRequestCacheService.buildStatusCountsCacheKey(req.user);
+
+      const { data: counts } = await CacheService.getCachedOrFetch({
+        key: cacheKey,
+        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.COUNTS_SECONDS,
+        fetchFn: () => ServiceRequestService.getStatusCounts(req.user),
+        res,
+      });
+
+      sendSuccess(res, counts, "Service request status counts retrieved successfully.");
+    }
+  );
 }

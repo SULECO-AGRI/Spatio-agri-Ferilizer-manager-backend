@@ -7,6 +7,7 @@ export const SERVICE_REQUEST_CACHE_TTL = {
   LIST_SECONDS: Number(process.env.CACHE_TTL_LIST_SECONDS) || 3600, // 1 hour (3,600s)
   DETAIL_SECONDS: Number(process.env.CACHE_TTL_DETAIL_SECONDS) || 86400, // 24 hours (86,400s)
   METRICS_SECONDS: Number(process.env.CACHE_TTL_METRICS_SECONDS) || 3600, // 1 hour (3,600s)
+  COUNTS_SECONDS: Number(process.env.CACHE_TTL_COUNTS_SECONDS) || 300, // 5 minutes (300s) safe fallback TTL
 };
 
 export class ServiceRequestCacheService {
@@ -96,6 +97,16 @@ export class ServiceRequestCacheService {
   }
 
   /**
+   * Generates dedicated cache key for unified Service Request status counts
+   * (pending, assigned, inProgress, completed, cancelled) scoped by user RBAC role & ID.
+   */
+  public static buildStatusCountsCacheKey(user?: JwtPayload): string {
+    const role = user?.role ? user.role.toLowerCase() : "anonymous";
+    const userId = user?.userId || 0;
+    return `service_requests:counts:role=${role}:user=${userId}`;
+  }
+
+  /**
    * Purges cache entries on mutation events (create, update, assign, delete)
    */
   public static async invalidateServiceRequestCaches(requestId?: number): Promise<void> {
@@ -114,6 +125,9 @@ export class ServiceRequestCacheService {
 
     // 4. Invalidate metrics/summary cache keys
     promises.push(CacheService.delByPattern("service_requests:metrics:*"));
+
+    // 5. Invalidate unified status counts cache keys
+    promises.push(CacheService.delByPattern("service_requests:counts:*"));
 
     await Promise.allSettled(promises);
     console.log(

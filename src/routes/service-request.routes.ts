@@ -44,6 +44,17 @@ router.get(
 );
 
 /**
+ * @route   GET /service-requests/counts
+ * @desc    Get aggregated service request status counts for summary metrics / badges
+ * @access  Private (Admin, Farmer, Pilot)
+ */
+router.get(
+  "/counts",
+  authorize("Admin", "Farmer", "Pilot"),
+  ServiceRequestController.getStatusCounts
+);
+
+/**
  * @route   GET /service-requests/:id
  * @desc    Get single service request detailed inspection with farmer, field & mission data
  * @access  Private (Admin, Farmer, Pilot)

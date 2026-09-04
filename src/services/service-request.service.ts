@@ -1,6 +1,7 @@
 import prisma from "../config/prisma";
 import {
   CreateServiceRequestDTO,
+  ServiceRequestStatusCountsDTO,
   ServiceRequestQueryDTO,
   AssignPilotDTO,
   UpdateServiceRequestStatusDTO,
@@ -10,6 +11,11 @@ import {
   CursorPaginatedServiceRequestsResponseDTO,
 } from "../types/service-request.types";
 import { JwtPayload } from "../types/auth.types";
+import {
+  ServiceRequestCacheService,
+  SERVICE_REQUEST_CACHE_TTL,
+} from "./service-request-cache.service";
+import { CacheService } from "../utils/cache";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
 import {
@@ -259,7 +265,7 @@ export class ServiceRequestService {
         ? { missions: { some: { pilotId: requestUser.userId } } }
         : {};
 
-    const [total, requests, summaryCounts] = await Promise.all([
+    const [total, requests, statusCounts] = await Promise.all([
       prisma.serviceRequest.count({ where: whereClause }),
       prisma.serviceRequest.findMany({
         where: whereClause,
@@ -302,26 +308,12 @@ export class ServiceRequestService {
           },
         },
       }),
-      prisma.serviceRequest.groupBy({
-        by: ["status"],
-        where: baseScopeWhere,
-        _count: { status: true },
-      }),
+      CacheService.getCachedOrFetch({
+        key: ServiceRequestCacheService.buildStatusCountsCacheKey(requestUser),
+        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.COUNTS_SECONDS,
+        fetchFn: () => this.getStatusCounts(requestUser),
+      }).then((r) => r.data),
     ]);
-
-    let totalPending = 0;
-    let totalAssigned = 0;
-    let totalInProgress = 0;
-    let totalCompleted = 0;
-    let totalCancelled = 0;
-
-    for (const sc of summaryCounts) {
-      if (sc.status === RequestStatus.PENDING) totalPending = sc._count.status;
-      if (sc.status === RequestStatus.ASSIGNED) totalAssigned = sc._count.status;
-      if (sc.status === RequestStatus.IN_PROGRESS) totalInProgress = sc._count.status;
-      if (sc.status === RequestStatus.COMPLETED) totalCompleted = sc._count.status;
-      if (sc.status === RequestStatus.CANCELLED) totalCancelled = sc._count.status;
-    }
 
     const items: ServiceRequestListItemDTO[] = requests.map((req) => {
       const farmerUser = req.field.farmer.user;
@@ -382,11 +374,11 @@ export class ServiceRequestService {
     return {
       requests: items,
       summary: {
-        totalPending,
-        totalAssigned,
-        totalInProgress,
-        totalCompleted,
-        totalCancelled,
+        totalPending: statusCounts.pending,
+        totalAssigned: statusCounts.assigned,
+        totalInProgress: statusCounts.inProgress,
+        totalCompleted: statusCounts.completed,
+        totalCancelled: statusCounts.cancelled,
       },
       pagination,
     };
@@ -523,7 +515,7 @@ export class ServiceRequestService {
         ? { missions: { some: { pilotId: requestUser.userId } } }
         : {};
 
-    const [requests, summaryCounts] = await Promise.all([
+    const [requests, statusCounts] = await Promise.all([
       prisma.serviceRequest.findMany({
         where: whereClause,
         take: limit + 1, // Fetch limit + 1 to detect next/previous page
@@ -567,26 +559,12 @@ export class ServiceRequestService {
           },
         },
       }),
-      prisma.serviceRequest.groupBy({
-        by: ["status"],
-        where: baseScopeWhere,
-        _count: { status: true },
-      }),
+      CacheService.getCachedOrFetch({
+        key: ServiceRequestCacheService.buildStatusCountsCacheKey(requestUser),
+        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.COUNTS_SECONDS,
+        fetchFn: () => this.getStatusCounts(requestUser),
+      }).then((r) => r.data),
     ]);
-
-    let totalPending = 0;
-    let totalAssigned = 0;
-    let totalInProgress = 0;
-    let totalCompleted = 0;
-    let totalCancelled = 0;
-
-    for (const sc of summaryCounts) {
-      if (sc.status === RequestStatus.PENDING) totalPending = sc._count.status;
-      if (sc.status === RequestStatus.ASSIGNED) totalAssigned = sc._count.status;
-      if (sc.status === RequestStatus.IN_PROGRESS) totalInProgress = sc._count.status;
-      if (sc.status === RequestStatus.COMPLETED) totalCompleted = sc._count.status;
-      if (sc.status === RequestStatus.CANCELLED) totalCancelled = sc._count.status;
-    }
 
     const hasExtraRow = requests.length > limit;
     const rawResultRows = hasExtraRow ? requests.slice(0, limit) : requests;
@@ -675,11 +653,11 @@ export class ServiceRequestService {
     return {
       requests: items,
       summary: {
-        totalPending,
-        totalAssigned,
-        totalInProgress,
-        totalCompleted,
-        totalCancelled,
+        totalPending: statusCounts.pending,
+        totalAssigned: statusCounts.assigned,
+        totalInProgress: statusCounts.inProgress,
+        totalCompleted: statusCounts.completed,
+        totalCancelled: statusCounts.cancelled,
       },
       pageInfo,
     };
@@ -991,5 +969,76 @@ export class ServiceRequestService {
     });
 
     return this.getServiceRequestById(requestId, requestUser);
+  }
+
+  /**
+   * 6. GET SERVICE REQUEST STATUS COUNTS (Cached Aggregation)
+   * Consolidates all lifecycle counts (pending, assigned, in_progress, completed, cancelled, rejected)
+   * into a single database GROUP BY query roundtrip.
+   */
+  public static async getStatusCounts(
+    requestUser?: JwtPayload
+  ): Promise<ServiceRequestStatusCountsDTO> {
+    if (!requestUser) {
+      throw AppError.unauthorized("Authentication required.");
+    }
+
+    const userRole = requestUser.role.toLowerCase();
+
+    // Base scope filter according to RBAC tenancy
+    const baseScopeWhere: any =
+      userRole === "farmer"
+        ? { field: { farmerId: requestUser.userId } }
+        : userRole === "pilot"
+        ? { missions: { some: { pilotId: requestUser.userId } } }
+        : {};
+
+    const groupCounts = await prisma.serviceRequest.groupBy({
+      by: ["status"],
+      where: baseScopeWhere,
+      _count: { status: true },
+    });
+
+    let pending = 0;
+    let assigned = 0;
+    let inProgress = 0;
+    let completed = 0;
+    let cancelled = 0;
+    let rejected = 0;
+
+    for (const item of groupCounts) {
+      switch (item.status) {
+        case RequestStatus.PENDING:
+          pending = item._count.status;
+          break;
+        case RequestStatus.ASSIGNED:
+          assigned = item._count.status;
+          break;
+        case RequestStatus.IN_PROGRESS:
+          inProgress = item._count.status;
+          break;
+        case RequestStatus.COMPLETED:
+          completed = item._count.status;
+          break;
+        case RequestStatus.CANCELLED:
+          cancelled = item._count.status;
+          break;
+        case RequestStatus.REJECTED:
+          rejected = item._count.status;
+          break;
+      }
+    }
+
+    const total = pending + assigned + inProgress + completed + cancelled + rejected;
+
+    return {
+      pending,
+      assigned,
+      inProgress,
+      completed,
+      cancelled,
+      rejected,
+      total,
+    };
   }
 }

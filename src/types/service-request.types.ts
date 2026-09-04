@@ -9,6 +9,16 @@ export interface CreateServiceRequestDTO {
   estimatedCost?: number;
 }
 
+export interface ServiceRequestStatusCountsDTO {
+  pending: number;
+  assigned: number;
+  inProgress: number;
+  completed: number;
+  cancelled: number;
+  rejected: number;
+  total: number;
+}
+
 export interface ServiceRequestQueryDTO {
   page?: number;
   limit?: number;
