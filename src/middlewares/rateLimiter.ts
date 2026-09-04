@@ -27,6 +27,41 @@ interface RateLimiterConfig {
   windowMs: number;
   /** Human-readable message returned when the limit is exceeded */
   message: string;
+  /** Distinct Redis key prefix to prevent collision across different limiters */
+  prefix: string;
+  /** When true, successful requests (2xx status codes) do not count against the rate limit */
+  skipSuccessfulRequests?: boolean;
+  /** When true, failed requests (4xx/5xx status codes) do not count against the rate limit */
+  skipFailedRequests?: boolean;
+  /** Optional custom skip predicate function */
+  skip?: (req: Request) => boolean;
+}
+
+/**
+ * Extracts and normalizes the client IP address.
+ * Handles X-Forwarded-For (from proxies/load balancers), Express req.ip,
+ * and normalizes IPv6-mapped IPv4 representations (e.g., ::ffff:127.0.0.1 -> 127.0.0.1).
+ */
+export function getClientIp(req: Request): string {
+  const xForwardedFor = req.headers["x-forwarded-for"];
+  let ip = "";
+
+  if (typeof xForwardedFor === "string") {
+    ip = xForwardedFor.split(",")[0].trim();
+  } else if (Array.isArray(xForwardedFor) && xForwardedFor.length > 0) {
+    ip = xForwardedFor[0].trim();
+  } else if (req.ip) {
+    ip = req.ip;
+  } else if (req.socket?.remoteAddress) {
+    ip = req.socket.remoteAddress;
+  }
+
+  if (!ip || ip === "::1") {
+    return "127.0.0.1";
+  }
+
+  // Strip IPv6-mapped IPv4 prefix
+  return ip.replace(/^::ffff:/, "");
 }
 
 /**
@@ -86,6 +121,7 @@ function buildUpstashLimiter(config: RateLimiterConfig): Ratelimit | null {
         config.limit,
         `${config.windowMs}ms` as `${number}ms`
       ),
+      prefix: config.prefix, // Use isolated prefix per limiter
       analytics: false, // disable Upstash analytics write-back to reduce latency
     });
   } catch (err) {
@@ -101,11 +137,14 @@ function buildUpstashLimiter(config: RateLimiterConfig): Ratelimit | null {
  * Creates a distributed rate-limiting middleware backed by Upstash Redis.
  *
  * Strategy:
- *  - If Upstash credentials exist → use @upstash/ratelimit (REST-based, no Lua)
- *  - Otherwise → fall back to express-rate-limit's built-in in-memory store
+ *  - If Upstash credentials exist -> use @upstash/ratelimit (REST-based, sliding window, isolated prefix)
+ *  - Otherwise -> fall back to express-rate-limit's built-in in-memory store
  *
- * The in-memory fallback works correctly for single-process deployments.
- * For multi-process/multi-instance deployments you must have Upstash configured.
+ * Security & Reliability:
+ *  - skipSuccessfulRequests: When enabled, successful responses (HTTP 2xx) reset
+ *    or do not penalize the IP counter, strictly targeting failed brute-force attempts.
+ *  - OPTIONS preflight requests bypass rate limiting entirely.
+ *  - Client IP is normalized behind proxies.
  */
 export function createDistributedRateLimiter(
   config: RateLimiterConfig
@@ -114,28 +153,30 @@ export function createDistributedRateLimiter(
 
   if (upstashLimiter) {
     console.log(
-      `[RateLimit] Upstash sliding-window limiter active: ${config.limit} req / ${config.windowMs}ms`
+      `[RateLimit] Upstash sliding-window limiter active [${config.prefix}]: ${config.limit} req / ${config.windowMs}ms`
     );
 
-    // Return an express middleware that calls @upstash/ratelimit on each request
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-      // Use the client IP as the rate-limit key
-      const identifier =
-        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-        req.socket.remoteAddress ||
-        "anonymous";
+      // 1. Bypass CORS preflight OPTIONS or custom skip condition
+      if (req.method === "OPTIONS" || (config.skip && config.skip(req))) {
+        return next();
+      }
+
+      // 2. Resolve client IP key
+      const identifier = getClientIp(req);
 
       try {
         const { success, limit, remaining, reset } =
           await upstashLimiter.limit(identifier);
 
-        // Set standard rate-limit response headers
+        // 3. Set standard rate-limit response headers
         res.setHeader("RateLimit-Limit", limit);
         res.setHeader("RateLimit-Remaining", remaining);
         res.setHeader("RateLimit-Reset", Math.ceil(reset / 1000)); // seconds
         res.setHeader("X-RateLimit-Limit", limit);
         res.setHeader("X-RateLimit-Remaining", remaining);
 
+        // 4. If rate limit exceeded, block request with 429
         if (!success) {
           res.status(429).json({
             status: "error",
@@ -144,11 +185,27 @@ export function createDistributedRateLimiter(
           return;
         }
 
+        // 5. If skipSuccessfulRequests is true, reset used tokens upon successful completion (HTTP 2xx)
+        if (config.skipSuccessfulRequests) {
+          res.on("finish", async () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try {
+                await upstashLimiter.resetUsedTokens(identifier);
+              } catch (resetErr) {
+                console.warn(
+                  "[RateLimit] Failed to reset tokens on success:",
+                  (resetErr as Error).message
+                );
+              }
+            }
+          });
+        }
+
         next();
       } catch (err) {
-        // If Upstash is unreachable, pass through rather than blocking traffic
+        // If Upstash is unreachable, pass through rather than blocking legitimate traffic
         console.warn(
-          "[RateLimit] Upstash error — passing request through:",
+          "[RateLimit] Upstash error - passing request through:",
           (err as Error).message
         );
         next();
@@ -156,10 +213,9 @@ export function createDistributedRateLimiter(
     };
   }
 
-  // ── In-memory fallback (express-rate-limit) ──────────────────────────────
+  // -- In-memory fallback (express-rate-limit) ------------------------------
   console.log(
-    "[RateLimit] No Upstash credentials — using in-memory rate limiter " +
-    "(not shared across processes)."
+    `[RateLimit] No Upstash credentials - using in-memory rate limiter [${config.prefix}]`
   );
 
   return rateLimit({
@@ -168,6 +224,10 @@ export function createDistributedRateLimiter(
     standardHeaders: "draft-7",
     legacyHeaders: true,
     passOnStoreError: true,
+    skipSuccessfulRequests: config.skipSuccessfulRequests ?? false,
+    skipFailedRequests: config.skipFailedRequests ?? false,
+    skip: (req) => req.method === "OPTIONS" || (config.skip ? config.skip(req) : false),
+    keyGenerator: (req) => getClientIp(req),
     message: {
       status: "error",
       message: config.message,
@@ -176,21 +236,25 @@ export function createDistributedRateLimiter(
 }
 
 /**
- * Global API Rate Limiter: 100 requests per 15 minutes
+ * Global API Rate Limiter: 100 requests per 15 minutes (isolated prefix rl:global)
  */
 export const globalApiLimiter = createDistributedRateLimiter({
+  prefix: "rl:global",
   windowMs: 15 * 60 * 1000,
   limit: Number(process.env.RATE_LIMIT_GLOBAL_MAX) || 100,
   message: "Too many requests from this IP, please try again after 15 minutes.",
 });
 
 /**
- * Strict Auth Rate Limiter: 5 requests per 15 minutes
+ * Strict Auth Rate Limiter: 5 failed attempts per 15 minutes (isolated prefix rl:auth)
  * Protects /login, /register routes against brute-force attacks.
+ * Resets counter immediately on successful authentication (HTTP 200).
  */
 export const authLimiter = createDistributedRateLimiter({
+  prefix: "rl:auth",
   windowMs: 15 * 60 * 1000,
   limit: Number(process.env.RATE_LIMIT_AUTH_MAX) || 5,
+  skipSuccessfulRequests: true,
   message:
     "Too many authentication attempts from this IP, please try again after 15 minutes.",
 });

@@ -10,6 +10,9 @@ import { errorHandler } from "./middlewares/errorHandler";
 
 const app: Application = express();
 
+// Enable trust proxy so req.ip and X-Forwarded-For headers are properly resolved behind proxies/load balancers
+app.set("trust proxy", 1);
+
 // 0. Terminal Request Logger (logs method, URL, status, duration, CACHE HIT/MISS)
 app.use(requestLogger);
 
