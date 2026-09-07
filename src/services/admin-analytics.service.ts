@@ -1,5 +1,6 @@
 import prisma from "../config/prisma";
 import {
+  AdminAnalyticsSummaryDTO,
   CompletedMissionsAnalyticsDTO,
   RevenueAnalyticsDTO,
   PilotFleetPerformanceDTO,
@@ -16,9 +17,71 @@ import {
   PaymentStatus,
 } from "../generated/prisma/enums";
 
+const formatRevenue = (amount: number): string => {
+  if (amount >= 1_000_000) {
+    const millions = amount / 1_000_000;
+    return `LKR ${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M`;
+  }
+  if (amount >= 1_000) {
+    const thousands = amount / 1_000;
+    return `LKR ${thousands % 1 === 0 ? thousands.toFixed(0) : thousands.toFixed(1)}K`;
+  }
+  return `LKR ${amount.toLocaleString()}`;
+};
+
+const formatGrowth = (percentage: number): string => {
+  if (percentage > 0) return `+${percentage}%`;
+  return `${percentage}%`;
+};
+
 export class AdminAnalyticsService {
   /**
+   * 0. GET CONSOLIDATED KPI ANALYTICS SUMMARY
+   * Returns high-level metrics for the 4 dashboard KPI cards:
+   * 1. Completed Missions
+   * 2. Total Revenue (LKR)
+   * 3. Pilot Performance (Fleet Average Rating)
+   * 4. Farmer Growth (%)
+   */
+  public static async getAnalyticsSummary(): Promise<AdminAnalyticsSummaryDTO> {
+    const [missions, revenue, pilots, farmers] = await Promise.all([
+      this.getCompletedMissionsAnalytics(),
+      this.getRevenueAnalytics(),
+      this.getPilotFleetPerformance(),
+      this.getFarmerGrowth(),
+    ]);
 
+    return {
+      completedMissions: {
+        value: missions.totalCompletedMissions,
+        formatted: missions.totalCompletedMissions.toLocaleString(),
+        completedToday: missions.completedToday,
+        completedThisMonth: missions.completedThisMonth,
+        growthPercentage: missions.monthOverMonthGrowthPercentage,
+      },
+      revenue: {
+        value: revenue.totalRevenue,
+        formatted: formatRevenue(revenue.totalRevenue),
+        revenueThisMonth: revenue.revenueThisMonth,
+        growthPercentage: revenue.monthOverMonthGrowthPercentage,
+        currency: revenue.currency,
+      },
+      pilotPerformance: {
+        value: pilots.fleetAverageRating,
+        formatted: `${pilots.fleetAverageRating.toFixed(1)} avg`,
+        totalPilots: pilots.totalPilots,
+        activePilots: pilots.activePilots,
+      },
+      farmerGrowth: {
+        value: farmers.growthPercentage,
+        formatted: formatGrowth(farmers.growthPercentage),
+        totalFarmers: farmers.totalFarmers,
+        newFarmersThisMonth: farmers.newFarmersThisMonth,
+      },
+    };
+  }
+
+  /**
    * 1. GET COMPLETED MISSIONS ANALYTICS
    */
   public static async getCompletedMissionsAnalytics(): Promise<CompletedMissionsAnalyticsDTO> {

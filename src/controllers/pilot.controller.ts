@@ -6,6 +6,7 @@ import {
 } from "../services/pilot-cache.service";
 import { ServiceRequestCacheService } from "../services/service-request-cache.service";
 import { FarmerCacheService } from "../services/farmer-cache.service";
+import { AdminAnalyticsCacheService } from "../services/admin-analytics-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendSuccess, sendPaginated } from "../utils/response";
@@ -118,11 +119,12 @@ export class PilotController {
         req.user
       );
 
-      // Invalidate pilot, service request, and farmer caches
+      // Invalidate pilot, service request, farmer, and admin analytics caches
       Promise.allSettled([
         PilotCacheService.invalidatePilotCaches(pilotId),
         ServiceRequestCacheService.invalidateServiceRequestCaches(),
         FarmerCacheService.invalidateFarmerCaches(),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
       ]).catch((err) => {
         console.warn("[PilotController] Cache invalidation warning:", err.message);
       });
@@ -148,11 +150,12 @@ export class PilotController {
         req.user
       );
 
-      // Invalidate pilot, service request, and farmer caches
+      // Invalidate pilot, service request, farmer, and admin analytics caches
       Promise.allSettled([
         PilotCacheService.invalidatePilotCaches(pilotId),
         ServiceRequestCacheService.invalidateServiceRequestCaches(),
         FarmerCacheService.invalidateFarmerCaches(),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
       ]).catch((err) => {
         console.warn("[PilotController] Cache invalidation warning:", err.message);
       });
@@ -232,11 +235,12 @@ export class PilotController {
         req.user
       );
 
-      // Invalidate service request, pilot, and farmer caches
+      // Invalidate service request, pilot, farmer, and admin analytics caches
       Promise.allSettled([
         ServiceRequestCacheService.invalidateServiceRequestCaches(result.requestId),
         PilotCacheService.invalidatePilotCaches(req.user?.userId),
         FarmerCacheService.invalidateFarmerCaches(),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
       ]).catch((err) => {
         console.warn("[PilotController] Cache invalidation warning:", err.message);
       });

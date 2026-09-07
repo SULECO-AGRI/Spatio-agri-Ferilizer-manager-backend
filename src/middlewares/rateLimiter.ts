@@ -236,25 +236,35 @@ export function createDistributedRateLimiter(
 }
 
 /**
- * Global API Rate Limiter: 100 requests per 15 minutes (isolated prefix rl:global)
+ * Global API Rate Limiter: 2000 requests per 15 minutes in dev (1000 in prod), isolated prefix rl:global:v2
  */
 export const globalApiLimiter = createDistributedRateLimiter({
-  prefix: "rl:global",
+  prefix: "rl:global:v2",
   windowMs: 15 * 60 * 1000,
-  limit: Number(process.env.RATE_LIMIT_GLOBAL_MAX) || 100,
+  limit:
+    Number(process.env.RATE_LIMIT_GLOBAL_MAX) ||
+    (process.env.NODE_ENV === "production" ? 1000 : 2500),
+  skip: (req: Request) => {
+    // Disable rate limiting if explicitly set in environment
+    if (process.env.RATE_LIMIT_ENABLED === "false") {
+      return true;
+    }
+    return false;
+  },
   message: "Too many requests from this IP, please try again after 15 minutes.",
 });
 
 /**
- * Strict Auth Rate Limiter: 5 failed attempts per 15 minutes (isolated prefix rl:auth)
+ * Strict Auth Rate Limiter: 20 failed attempts per 15 minutes (isolated prefix rl:auth:v2)
  * Protects /login, /register routes against brute-force attacks.
  * Resets counter immediately on successful authentication (HTTP 200).
  */
 export const authLimiter = createDistributedRateLimiter({
-  prefix: "rl:auth",
+  prefix: "rl:auth:v2",
   windowMs: 15 * 60 * 1000,
-  limit: Number(process.env.RATE_LIMIT_AUTH_MAX) || 5,
+  limit: Number(process.env.RATE_LIMIT_AUTH_MAX) || 20,
   skipSuccessfulRequests: true,
+  skip: () => process.env.RATE_LIMIT_ENABLED === "false",
   message:
     "Too many authentication attempts from this IP, please try again after 15 minutes.",
 });

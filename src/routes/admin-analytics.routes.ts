@@ -11,6 +11,13 @@ router.use(authenticate);
 router.use(authorize("Admin"));
 
 /**
+ * @route   GET /admin/analytics/summary
+ * @desc    Get high-level 4 KPI summary cards (Completed Missions, Revenue, Pilot Performance, Farmer Growth)
+ * @access  Private (Admin Only)
+ */
+router.get("/summary", AdminAnalyticsController.getAnalyticsSummary);
+
+/**
  * @route   GET /admin/analytics/completed-missions
  * @desc    Get total completed missions metrics and month-over-month growth rate
  * @access  Private (Admin Only)

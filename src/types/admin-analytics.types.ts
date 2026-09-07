@@ -1,5 +1,34 @@
 import { PaginationMeta } from "./farmer.types";
 
+export interface AdminAnalyticsSummaryDTO {
+  completedMissions: {
+    value: number;
+    formatted: string;
+    completedToday: number;
+    completedThisMonth: number;
+    growthPercentage: number;
+  };
+  revenue: {
+    value: number;
+    formatted: string;
+    revenueThisMonth: number;
+    growthPercentage: number;
+    currency: string;
+  };
+  pilotPerformance: {
+    value: number;
+    formatted: string;
+    totalPilots: number;
+    activePilots: number;
+  };
+  farmerGrowth: {
+    value: number;
+    formatted: string;
+    totalFarmers: number;
+    newFarmersThisMonth: number;
+  };
+}
+
 export interface CompletedMissionsAnalyticsDTO {
   totalCompletedMissions: number;
   completedToday: number;

@@ -6,6 +6,7 @@ import {
 } from "../services/service-request-cache.service";
 import { PilotCacheService } from "../services/pilot-cache.service";
 import { FarmerCacheService } from "../services/farmer-cache.service";
+import { AdminAnalyticsCacheService } from "../services/admin-analytics-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
@@ -178,6 +179,7 @@ export class ServiceRequestController {
         ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
         PilotCacheService.invalidatePilotCaches(req.body.pilotId),
         FarmerCacheService.invalidateFarmerCaches(),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
       ]).catch((err) => {
         console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
       });
@@ -207,6 +209,7 @@ export class ServiceRequestController {
       Promise.allSettled([
         ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
         FarmerCacheService.invalidateFarmerCaches(),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
       ]).catch((err) => {
         console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
       });
