@@ -70,6 +70,17 @@ export interface FarmerFieldDTO {
   updatedAt: Date;
 }
 
+export interface CreateFieldDTO {
+  fieldName: string;
+  cropType: string;
+  area: number;
+  locationCoordinates: number[][];
+  province: string;
+  district: string;
+  city: string;
+  village: string;
+}
+
 export interface FarmerFieldsQueryDTO {
   cropType?: string;
   district?: string;

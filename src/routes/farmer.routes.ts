@@ -4,11 +4,13 @@ import { authenticate, authorize } from "../middlewares/auth.middleware";
 import {
   validateParams,
   validateQuery,
+  validateBody,
 } from "../middlewares/validate.middleware";
 import {
   farmerIdParamSchema,
   farmerListQuerySchema,
   farmerFieldsQuerySchema,
+  createFieldSchema,
   farmerServicesQuerySchema,
   farmerPaymentsQuerySchema,
 } from "../validations/farmer.validation";
@@ -53,6 +55,19 @@ router.get(
   validateParams(farmerIdParamSchema),
   validateQuery(farmerFieldsQuerySchema),
   FarmerController.getFarmerFields
+);
+
+/**
+ * @route   POST /farmers/:id/fields
+ * @desc    Register a new agricultural field for a farmer
+ * @access  Private (Admin for any farmer, Farmer for own account only)
+ */
+router.post(
+  "/:id/fields",
+  authorize("Admin", "Farmer"),
+  validateParams(farmerIdParamSchema),
+  validateBody(createFieldSchema),
+  FarmerController.createField
 );
 
 /**

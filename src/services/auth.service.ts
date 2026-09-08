@@ -1,4 +1,5 @@
 import prisma from "../config/prisma";
+import { PilotStatus } from "../generated/prisma/enums";
 import {
   RegisterFarmerDTO,
   RegisterPilotDTO,
@@ -241,6 +242,7 @@ export class AuthService {
         data: {
           userId: user.userId,
           licenceNumber,
+          status: PilotStatus.INACTIVE,
           totalFlightHours: totalFlightHours || 0.0,
         },
       });

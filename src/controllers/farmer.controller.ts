@@ -4,9 +4,10 @@ import {
   FarmerCacheService,
   FARMER_CACHE_TTL,
 } from "../services/farmer-cache.service";
+import { AdminAnalyticsCacheService } from "../services/admin-analytics-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
-import { sendSuccess, sendPaginated } from "../utils/response";
+import { sendSuccess, sendCreated, sendPaginated } from "../utils/response";
 
 export class FarmerController {
   /**
@@ -72,6 +73,32 @@ export class FarmerController {
       });
 
       sendSuccess(res, { fields });
+    }
+  );
+
+  /**
+   * POST /farmers/:id/fields
+   * Register a new agricultural field for a farmer
+   * Access: Admin (for any farmer) or Farmer (for their own account only)
+   */
+  public static createField = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const farmerId = Number(req.params.id);
+      const newField = await FarmerService.createField(
+        farmerId,
+        req.body,
+        req.user
+      );
+
+      // Event-driven cache purging for farmer caches & admin analytics
+      Promise.allSettled([
+        FarmerCacheService.invalidateFarmerCaches(farmerId),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
+      ]).catch((err) => {
+        console.warn("[FarmerController] Cache invalidation warning:", err.message);
+      });
+
+      sendCreated(res, { field: newField }, "Field registered successfully.");
     }
   );
 

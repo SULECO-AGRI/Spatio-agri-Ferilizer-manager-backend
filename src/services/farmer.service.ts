@@ -4,6 +4,7 @@ import {
   FarmerListItemDTO,
   FarmerProfileDetailDTO,
   FarmerFieldDTO,
+  CreateFieldDTO,
   FarmerFieldsQueryDTO,
   FarmerServiceHistoryQueryDTO,
   FarmerServiceRequestDTO,
@@ -359,6 +360,56 @@ export class FarmerService {
       createdAt: f.createdAt,
       updatedAt: f.updatedAt,
     }));
+  }
+
+  /**
+   * 3.1 CREATE AGRICULTURAL FIELD FOR A FARMER
+   * Access: Admin (can add field for any farmer) or Farmer (can add field for their own account only)
+   */
+  public static async createField(
+    farmerId: number,
+    dto: CreateFieldDTO,
+    requestUser?: JwtPayload
+  ): Promise<FarmerFieldDTO> {
+    if (requestUser) {
+      this.validateFarmerAccess(requestUser, farmerId);
+    }
+    await this.validateFarmerExists(farmerId);
+
+    const newField = await prisma.field.create({
+      data: {
+        farmerId,
+        fieldName: dto.fieldName,
+        cropType: dto.cropType,
+        area: dto.area,
+        locationCoordinates: dto.locationCoordinates as any,
+        province: dto.province,
+        district: dto.district,
+        city: dto.city,
+        village: dto.village,
+      },
+      include: {
+        _count: {
+          select: { serviceRequests: true },
+        },
+      },
+    });
+
+    return {
+      id: newField.id,
+      farmerId: newField.farmerId,
+      fieldName: newField.fieldName,
+      cropType: newField.cropType,
+      locationCoordinates: newField.locationCoordinates,
+      area: Number(newField.area),
+      province: newField.province,
+      district: newField.district,
+      city: newField.city,
+      village: newField.village,
+      totalRequests: newField._count.serviceRequests,
+      createdAt: newField.createdAt,
+      updatedAt: newField.updatedAt,
+    };
   }
 
   /**
