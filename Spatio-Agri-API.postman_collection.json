@@ -715,18 +715,21 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/fields?page=1&limit=10&cropType=Paddy&sortBy=createdAt&sortOrder=desc",
+              "raw": "{{baseUrl}}/fields?page=1&limit=10&search=&cropType=Tea&province=Central&district=Nuwara%20Eliya&sortBy=createdAt&sortOrder=desc",
               "host": ["{{baseUrl}}"],
               "path": ["fields"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
-                { "key": "cropType", "value": "Paddy" },
+                { "key": "search", "value": "" },
+                { "key": "cropType", "value": "Tea" },
+                { "key": "province", "value": "Central" },
+                { "key": "district", "value": "Nuwara Eliya" },
                 { "key": "sortBy", "value": "createdAt" },
                 { "key": "sortOrder", "value": "desc" }
               ]
             },
-            "description": "Lists all registered fields. Admin sees all fields; Farmers see only their own registered fields."
+            "description": "Lists registered agricultural fields with search across field name, city, village, and farmer name, plus district and crop type filters."
           },
           "response": []
         },
@@ -740,12 +743,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["fields", "{{fieldId}}"]
             },
-            "description": "Retrieves comprehensive field information, owner farmer details, boundary polygon coordinates, and mission request history."
+            "description": "Retrieves comprehensive field information, owner farmer details, boundary polygon coordinates, area, and request counts."
           },
           "response": []
         },
         {
-          "name": "6.3 Get Fields By Farmer ID",
+          "name": "6.3 Filter Fields By Farmer ID",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -759,12 +762,12 @@
                 { "key": "limit", "value": "10" }
               ]
             },
-            "description": "Retrieves fields belonging to a specific farmer ID."
+            "description": "Retrieves paginated fields belonging to a specific farmer ID."
           },
           "response": []
         },
         {
-          "name": "6.4 Create Field (Admin for any / Farmer for self)",
+          "name": "6.4 Create Field (Admin / Schema Aligned)",
           "request": {
             "method": "POST",
             "header": [
@@ -773,19 +776,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"farmerId\": 3,\n  \"fieldName\": \"Highland Tea Estate Zone 1\",\n  \"cropType\": \"Tea\",\n  \"area\": 18.75,\n  \"locationCoordinates\": [\n    [6.9271, 80.7781],\n    [6.9295, 80.7812],\n    [6.9255, 80.7845],\n    [6.9230, 80.7800]\n  ],\n  \"province\": \"Central\",\n  \"district\": \"Nuwara Eliya\",\n  \"city\": \"Nuwara Eliya\",\n  \"village\": \"Pedro\"\n}"
+              "raw": "{\n  \"farmer_id\": 3,\n  \"field_name\": \"Highland Tea Estate Zone 1\",\n  \"crop_type\": \"Tea\",\n  \"area\": 18.75,\n  \"location_coordinates\": [\n    [6.9271, 80.7781],\n    [6.9295, 80.7812],\n    [6.9255, 80.7845],\n    [6.9230, 80.7800]\n  ],\n  \"province\": \"Central\",\n  \"district\": \"Nuwara Eliya\",\n  \"city\": \"Nuwara Eliya\",\n  \"village\": \"Pedro\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/fields",
               "host": ["{{baseUrl}}"],
               "path": ["fields"]
             },
-            "description": "Creates a new agricultural field with GeoJSON polygon telemetry and area acreage."
+            "description": "Creates and registers a new agricultural field matching exact PostgreSQL schema columns and Prisma models."
           },
           "response": []
         },
         {
-          "name": "6.5 Update Field By ID",
+          "name": "6.5 Update Field By ID (Partial Update)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -794,19 +797,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fieldName\": \"Highland Tea Estate - Renovated Sector A\",\n  \"cropType\": \"Tea\",\n  \"area\": 20.0\n}"
+              "raw": "{\n  \"field_name\": \"Highland Tea Estate - Renovated Sector A\",\n  \"crop_type\": \"Tea\",\n  \"area\": 20.00,\n  \"city\": \"Nuwara Eliya\",\n  \"village\": \"Pedro\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/fields/{{fieldId}}",
               "host": ["{{baseUrl}}"],
               "path": ["fields", "{{fieldId}}"]
             },
-            "description": "Updates agricultural field name, area acreage, crop type, or coordinates."
+            "description": "Performs partial mutation on field metadata, crop type, acreage, and coordinates."
           },
           "response": []
         },
         {
-          "name": "6.6 Delete Field By ID",
+          "name": "6.6 Delete Field By ID (Safeguarded)",
           "request": {
             "method": "DELETE",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -815,7 +818,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["fields", "{{fieldId}}"]
             },
-            "description": "Deletes an agricultural field (safeguarded: prevents deletion if active service requests or missions exist)."
+            "description": "Deletes an agricultural field record and purges Redis cache. Rejects with 409 Conflict if active service requests or missions are linked."
           },
           "response": []
         }

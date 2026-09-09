@@ -13,12 +13,13 @@ export interface FieldQueryDTO {
 }
 
 export interface FieldOwnerDTO {
+  id: number;
   userId: number;
   fullName: string;
   email: string;
   mobile: string;
-  nic: string | null;
-  address: string | null;
+  nic?: string | null;
+  address?: string | null;
 }
 
 export interface FieldDetailDTO {
@@ -26,7 +27,7 @@ export interface FieldDetailDTO {
   farmerId: number;
   fieldName: string;
   cropType: string;
-  locationCoordinates: number[][];
+  locationCoordinates: any;
   area: number;
   province: string;
   district: string;
@@ -41,11 +42,15 @@ export interface FieldDetailDTO {
 }
 
 export interface CreateFieldInputDTO {
-  farmerId?: number; // Optional if Farmer creates for self; required or derived
-  fieldName: string;
-  cropType: string;
+  farmer_id?: number;
+  farmerId?: number;
+  field_name?: string;
+  fieldName?: string;
+  crop_type?: string;
+  cropType?: string;
   area: number;
-  locationCoordinates: number[][];
+  location_coordinates?: any;
+  locationCoordinates?: any;
   province: string;
   district: string;
   city: string;
@@ -53,10 +58,13 @@ export interface CreateFieldInputDTO {
 }
 
 export interface UpdateFieldInputDTO {
+  field_name?: string;
   fieldName?: string;
+  crop_type?: string;
   cropType?: string;
   area?: number;
-  locationCoordinates?: number[][];
+  location_coordinates?: any;
+  locationCoordinates?: any;
   province?: string;
   district?: string;
   city?: string;
@@ -67,3 +75,4 @@ export interface PaginatedFieldsResponseDTO {
   fields: FieldDetailDTO[];
   pagination: PaginationMeta;
 }
+

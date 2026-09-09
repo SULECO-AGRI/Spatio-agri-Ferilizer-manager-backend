@@ -47,6 +47,7 @@ export class FieldCacheService {
   public static async invalidateFieldCaches(fieldId?: number, farmerId?: number): Promise<void> {
     const promises: Promise<unknown>[] = [
       CacheService.delByPattern("fields:list:*"),
+      CacheService.delByPattern("farmers:list:*"),
       CacheService.delByPattern("farmers:fields:*"),
       CacheService.delByPattern("admin:dashboard:*"),
       CacheService.del("admin:analytics:summary"),
@@ -69,3 +70,4 @@ export class FieldCacheService {
     );
   }
 }
+

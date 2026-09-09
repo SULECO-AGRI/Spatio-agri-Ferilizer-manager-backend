@@ -15,68 +15,65 @@ import {
 
 const router = Router();
 
-// Global authentication on all fields endpoints
+// Mount authentication and ADMIN authorization on all field routes
 router.use(authenticate);
+router.use(authorize("ADMIN"));
 
 /**
- * @route   GET /fields
+ * @route   GET /api/fields
  * @desc    Get paginated directory of fields with search, filters, and sorting
- * @access  Private (Admin sees all; Farmers see own)
+ * @access  Private (Admin Only)
  */
 router.get(
   "/",
-  authorize("Admin", "Farmer", "Pilot"),
   validateQuery(fieldListQuerySchema),
   FieldController.getAllFields
 );
 
 /**
- * @route   POST /fields
+ * @route   POST /api/fields
  * @desc    Register a new agricultural field
- * @access  Private (Admin for any farmer, Farmer for own account)
+ * @access  Private (Admin Only)
  */
 router.post(
   "/",
-  authorize("Admin", "Farmer"),
   validateBody(createFieldBodySchema),
   FieldController.createField
 );
 
 /**
- * @route   GET /fields/:id
+ * @route   GET /api/fields/:id
  * @desc    Get single field details with owner info, stats, and coordinates
- * @access  Private (Admin or field owner Farmer, Pilot)
+ * @access  Private (Admin Only)
  */
 router.get(
   "/:id",
-  authorize("Admin", "Farmer", "Pilot"),
   validateParams(fieldIdParamSchema),
   FieldController.getFieldById
 );
 
 /**
- * @route   PATCH /fields/:id
+ * @route   PATCH /api/fields/:id
  * @desc    Update field metadata, acreage, crop type, or coordinates
- * @access  Private (Admin or field owner Farmer)
+ * @access  Private (Admin Only)
  */
 router.patch(
   "/:id",
-  authorize("Admin", "Farmer"),
   validateParams(fieldIdParamSchema),
   validateBody(updateFieldBodySchema),
   FieldController.updateField
 );
 
 /**
- * @route   DELETE /fields/:id
- * @desc    Delete agricultural field (safeguarded against active missions)
- * @access  Private (Admin or field owner Farmer)
+ * @route   DELETE /api/fields/:id
+ * @desc    Delete agricultural field (safeguarded against active missions or service requests)
+ * @access  Private (Admin Only)
  */
 router.delete(
   "/:id",
-  authorize("Admin", "Farmer"),
   validateParams(fieldIdParamSchema),
   FieldController.deleteField
 );
 
 export default router;
+

@@ -9,7 +9,7 @@ import {
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
-import { RequestStatus } from "../generated/prisma/enums";
+import { RequestStatus, MissionStatus } from "../generated/prisma/enums";
 
 export class FieldService {
   /**
@@ -38,13 +38,16 @@ export class FieldService {
         : serviceRequests.length;
 
     const user = f.farmer?.user;
+    const farmerFullName = user
+      ? `${user.firstName} ${user.lastName}`.trim()
+      : "Unknown Farmer";
 
     return {
       id: f.id,
       farmerId: f.farmerId,
       fieldName: f.fieldName,
       cropType: f.cropType,
-      locationCoordinates: f.locationCoordinates as number[][],
+      locationCoordinates: f.locationCoordinates,
       area: Number(f.area),
       province: f.province,
       district: f.district,
@@ -54,8 +57,9 @@ export class FieldService {
       activeRequests,
       completedRequests,
       owner: {
+        id: f.farmerId,
         userId: f.farmerId,
-        fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "Unknown Farmer",
+        fullName: farmerFullName,
         email: user?.email || "",
         mobile: user?.mobile || "",
         nic: f.farmer?.nic || null,
@@ -68,7 +72,8 @@ export class FieldService {
 
   /**
    * 1. GET ALL FIELDS (Paginated, Searchable, Filterable, Sortable)
-   * Access: Admin can view all fields; Farmers see only their own registered fields.
+   * Query Params: page, limit, search, farmerId, cropType, province, district.
+   * Search filter checks: field_name, city, village, or related farmer name / email / mobile.
    */
   public static async getAllFields(
     query: FieldQueryDTO,
@@ -79,7 +84,15 @@ export class FieldService {
     }
 
     const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
-    const { search, cropType, district, province, farmerId, sortBy = "createdAt", sortOrder = "desc" } = query;
+    const {
+      search,
+      cropType,
+      district,
+      province,
+      farmerId,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = query;
 
     const whereClause: any = {};
 
@@ -235,6 +248,7 @@ export class FieldService {
   /**
    * 4. CREATE FIELD
    * Access: Admin (for any farmerId) or Farmer (for their own account)
+   * Validates target user is a FARMER.
    */
   public static async createField(
     dto: CreateFieldInputDTO,
@@ -244,46 +258,62 @@ export class FieldService {
       throw AppError.unauthorized("Authentication required.");
     }
 
-    let targetFarmerId = dto.farmerId;
+    let targetFarmerId = dto.farmerId ?? dto.farmer_id;
     const userRole = requestUser.role.toLowerCase();
 
     if (userRole === "farmer") {
       targetFarmerId = requestUser.userId;
     } else if (!targetFarmerId) {
-      throw AppError.badRequest("farmerId is required when creating a field as Admin.");
+      throw AppError.badRequest("farmer_id is required.");
     }
 
-    // Verify farmer profile exists
-    const farmer = await prisma.farmerProfile.findUnique({
-      where: { userId: targetFarmerId },
-      include: {
-        user: {
-          select: {
-            userId: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            mobile: true,
+    // Verify target user exists and role is FARMER
+    const farmerUser = await prisma.user.findFirst({
+      where: {
+        userId: targetFarmerId,
+        role: {
+          name: {
+            equals: "Farmer",
+            mode: "insensitive",
           },
         },
       },
+      include: {
+        farmerProfile: true,
+      },
     });
 
-    if (!farmer) {
-      throw AppError.notFound(`Farmer with ID ${targetFarmerId} not found.`);
+    if (!farmerUser) {
+      throw AppError.badRequest(
+        `User with ID ${targetFarmerId} is not a valid Farmer.`
+      );
     }
+
+    // Ensure farmer profile exists to satisfy foreign key constraints
+    if (!farmerUser.farmerProfile) {
+      await prisma.farmerProfile.create({
+        data: {
+          userId: targetFarmerId,
+        },
+      });
+    }
+
+    const fieldName = (dto.fieldName ?? dto.field_name)!.trim();
+    const cropType = (dto.cropType ?? dto.crop_type)!.trim();
+    const locationCoordinates =
+      dto.locationCoordinates ?? dto.location_coordinates;
 
     const newField = await prisma.field.create({
       data: {
         farmerId: targetFarmerId,
-        fieldName: dto.fieldName,
-        cropType: dto.cropType,
+        fieldName,
+        cropType,
         area: dto.area,
-        locationCoordinates: dto.locationCoordinates as any,
-        province: dto.province,
-        district: dto.district,
-        city: dto.city,
-        village: dto.village,
+        locationCoordinates: locationCoordinates as any,
+        province: dto.province.trim(),
+        district: dto.district.trim(),
+        city: dto.city.trim(),
+        village: dto.village.trim(),
       },
       include: {
         farmer: {
@@ -336,19 +366,28 @@ export class FieldService {
       throw AppError.forbidden("Access denied. You do not own this field.");
     }
 
+    const fieldName = dto.fieldName ?? dto.field_name;
+    const cropType = dto.cropType ?? dto.crop_type;
+    const locationCoordinates =
+      dto.locationCoordinates ?? dto.location_coordinates;
+
     const updatedField = await prisma.field.update({
       where: { id: fieldId },
       data: {
-        fieldName: dto.fieldName,
-        cropType: dto.cropType,
-        area: dto.area,
-        locationCoordinates: dto.locationCoordinates
-          ? (dto.locationCoordinates as any)
-          : undefined,
-        province: dto.province,
-        district: dto.district,
-        city: dto.city,
-        village: dto.village,
+        fieldName: fieldName !== undefined ? fieldName.trim() : undefined,
+        cropType: cropType !== undefined ? cropType.trim() : undefined,
+        area: dto.area !== undefined ? dto.area : undefined,
+        locationCoordinates:
+          locationCoordinates !== undefined
+            ? (locationCoordinates as any)
+            : undefined,
+        province:
+          dto.province !== undefined ? dto.province.trim() : undefined,
+        district:
+          dto.district !== undefined ? dto.district.trim() : undefined,
+        city: dto.city !== undefined ? dto.city.trim() : undefined,
+        village: dto.village !== undefined ? dto.village.trim() : undefined,
+        updatedAt: new Date(),
       },
       include: {
         farmer: {
@@ -379,7 +418,9 @@ export class FieldService {
   /**
    * 6. DELETE FIELD
    * Access: Admin or the owner Farmer
-   * Safeguard: Blocks deletion if active/in-progress missions or service requests exist.
+   * Safeguard: Check if any active service_requests or missions reference this field ID.
+   * If referenced, rejects deletion with HTTP 409 Conflict:
+   * "Cannot delete field with linked active service requests or missions."
    */
   public static async deleteField(
     fieldId: number,
@@ -393,14 +434,8 @@ export class FieldService {
       where: { id: fieldId },
       include: {
         serviceRequests: {
-          where: {
-            status: {
-              in: [
-                RequestStatus.PENDING,
-                RequestStatus.ASSIGNED,
-                RequestStatus.IN_PROGRESS,
-              ],
-            },
+          include: {
+            missions: true,
           },
         },
       },
@@ -417,9 +452,25 @@ export class FieldService {
       throw AppError.forbidden("Access denied. You do not own this field.");
     }
 
-    if (field.serviceRequests.length > 0) {
-      throw AppError.badRequest(
-        `Cannot delete field "${field.fieldName}" because it has ${field.serviceRequests.length} active or in-progress service requests.`
+    // Check active service requests or active missions
+    const hasActiveServiceRequests = field.serviceRequests.some(
+      (sr) =>
+        sr.status === RequestStatus.PENDING ||
+        sr.status === RequestStatus.ASSIGNED ||
+        sr.status === RequestStatus.IN_PROGRESS
+    );
+
+    const hasActiveMissions = field.serviceRequests.some((sr) =>
+      (sr.missions || []).some(
+        (m) =>
+          m.status === MissionStatus.SCHEDULED ||
+          m.status === MissionStatus.IN_PROGRESS
+      )
+    );
+
+    if (hasActiveServiceRequests || hasActiveMissions) {
+      throw AppError.conflict(
+        "Cannot delete field with linked active service requests or missions."
       );
     }
 
@@ -434,3 +485,4 @@ export class FieldService {
     };
   }
 }
+
