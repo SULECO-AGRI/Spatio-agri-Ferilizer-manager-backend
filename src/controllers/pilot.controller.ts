@@ -248,5 +248,35 @@ export class PilotController {
       sendSuccess(res, result, result.message);
     }
   );
+
+  /**
+   * DELETE /pilots/:id
+   * Delete pilot profile, duty credentials, and account
+   * Access: Admin (for any pilot) or Pilot (for their own account only)
+   */
+  public static deletePilot = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const deletedPilot = await PilotService.deletePilot(
+        pilotId,
+        req.user
+      );
+
+      // Event-driven Redis cache purging for pilot and admin analytics
+      Promise.allSettled([
+        PilotCacheService.invalidatePilotCaches(pilotId),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
+      ]).catch((err) => {
+        console.warn("[PilotController] Cache invalidation warning:", err.message);
+      });
+
+      sendSuccess(
+        res,
+        { pilot: deletedPilot },
+        "Pilot account and associated profiles deleted successfully."
+      );
+    }
+  );
 }
+
 

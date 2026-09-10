@@ -16,6 +16,7 @@ import {
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
+import { RequestStatus, MissionStatus } from "../generated/prisma/enums";
 
 export class FarmerService {
   /**
@@ -703,4 +704,130 @@ export class FarmerService {
       pagination,
     };
   }
+
+  /**
+   * 6. DELETE FARMER
+   * Access: Admin (for any farmer) or Farmer (for their own account only)
+   * Safeguard: Check if any active service requests (PENDING, ASSIGNED, IN_PROGRESS)
+   * or active missions (SCHEDULED, IN_PROGRESS) are linked to this farmer.
+   * Atomically deletes reviews, payments, missions, service requests, fields, farmer profile, and user account.
+   */
+  public static async deleteFarmer(
+    farmerId: number,
+    requestUser?: JwtPayload
+  ): Promise<{ userId: number; email: string; name: string }> {
+    this.validateFarmerAccess(requestUser, farmerId);
+
+    const farmer = await prisma.user.findFirst({
+      where: {
+        userId: farmerId,
+        role: {
+          name: "Farmer",
+        },
+      },
+      include: {
+        farmerProfile: {
+          include: {
+            fields: {
+              include: {
+                serviceRequests: {
+                  include: {
+                    missions: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!farmer) {
+      throw AppError.notFound(`Farmer with ID ${farmerId} not found.`);
+    }
+
+    // Check active service requests or missions
+    const fields = farmer.farmerProfile?.fields || [];
+    const allServiceRequests = fields.flatMap((f) => f.serviceRequests || []);
+    const allMissions = allServiceRequests.flatMap((sr) => sr.missions || []);
+
+    const hasActiveRequests = allServiceRequests.some(
+      (sr) =>
+        sr.status === RequestStatus.PENDING ||
+        sr.status === RequestStatus.ASSIGNED ||
+        sr.status === RequestStatus.IN_PROGRESS
+    );
+
+    const hasActiveMissions = allMissions.some(
+      (m) =>
+        m.status === MissionStatus.SCHEDULED ||
+        m.status === MissionStatus.IN_PROGRESS
+    );
+
+    if (hasActiveRequests || hasActiveMissions) {
+      throw AppError.conflict(
+        "Cannot delete farmer with active service requests or ongoing missions."
+      );
+    }
+
+    const fieldIds = fields.map((f) => f.id);
+    const requestIds = allServiceRequests.map((sr) => sr.requestId);
+    const missionIds = allMissions.map((m) => m.missionId);
+
+    // Execute atomic cleanup transaction
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete reviews submitted by this farmer or linked to their missions
+      await tx.review.deleteMany({
+        where: {
+          OR: [
+            { farmerId: farmerId },
+            ...(missionIds.length > 0 ? [{ missionId: { in: missionIds } }] : []),
+          ],
+        },
+      });
+
+      // 2. Delete payments linked to these missions
+      if (missionIds.length > 0) {
+        await tx.payment.deleteMany({
+          where: { missionId: { in: missionIds } },
+        });
+
+        // 3. Delete missions linked to these service requests
+        await tx.mission.deleteMany({
+          where: { missionId: { in: missionIds } },
+        });
+      }
+
+      // 4. Delete service requests for these fields
+      if (requestIds.length > 0) {
+        await tx.serviceRequest.deleteMany({
+          where: { requestId: { in: requestIds } },
+        });
+      }
+
+      // 5. Delete fields
+      if (fieldIds.length > 0) {
+        await tx.field.deleteMany({
+          where: { id: { in: fieldIds } },
+        });
+      }
+
+      // 6. Delete farmer profile
+      await tx.farmerProfile.deleteMany({
+        where: { userId: farmerId },
+      });
+
+      // 7. Delete user
+      await tx.user.delete({
+        where: { userId: farmerId },
+      });
+    });
+
+    return {
+      userId: farmer.userId,
+      email: farmer.email,
+      name: `${farmer.firstName} ${farmer.lastName}`.trim(),
+    };
+  }
 }
+

@@ -946,5 +946,114 @@ export class PilotService {
       };
     }
   }
+
+  /**
+   * 10. DELETE PILOT
+   * Access: Admin (for any pilot) or Pilot (for their own account only)
+   * Safeguard: Check if pilot has status ON_MISSION or active assigned missions (SCHEDULED, IN_PROGRESS).
+   * Atomically disassociates/cleans historical records, payouts, reviews, profile, and user account.
+   */
+  public static async deletePilot(
+    pilotId: number,
+    requestUser?: JwtPayload
+  ): Promise<{ userId: number; email: string; name: string }> {
+    this.validatePilotAccess(requestUser, pilotId);
+
+    const pilot = await prisma.user.findFirst({
+      where: {
+        userId: pilotId,
+        role: {
+          name: "Pilot",
+        },
+      },
+      include: {
+        pilotProfile: {
+          include: {
+            missions: true,
+          },
+        },
+      },
+    });
+
+    if (!pilot) {
+      throw AppError.notFound(`Pilot with ID ${pilotId} not found.`);
+    }
+
+    if (pilot.pilotProfile?.status === PilotStatus.ON_MISSION) {
+      throw AppError.conflict(
+        "Cannot delete pilot while actively on duty / on a mission."
+      );
+    }
+
+    const assignedMissions = pilot.pilotProfile?.missions || [];
+    const hasActiveMissions = assignedMissions.some(
+      (m) =>
+        m.status === MissionStatus.SCHEDULED ||
+        m.status === MissionStatus.IN_PROGRESS
+    );
+
+    if (hasActiveMissions) {
+      throw AppError.conflict(
+        "Cannot delete pilot with active assigned missions. Reassign or cancel missions first."
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete reviews referencing this pilot
+      await tx.review.deleteMany({
+        where: { pilotId },
+      });
+
+      // 2. Unlink payments from pilot's payouts
+      const payouts = await tx.payout.findMany({
+        where: { pilotId },
+        select: { payoutId: true },
+      });
+      const payoutIds = payouts.map((p) => p.payoutId);
+
+      if (payoutIds.length > 0) {
+        await tx.payment.updateMany({
+          where: { payoutId: { in: payoutIds } },
+          data: { payoutId: null, payoutStatus: "UNSETTLED" },
+        });
+
+        // Delete payouts
+        await tx.payout.deleteMany({
+          where: { payoutId: { in: payoutIds } },
+        });
+      }
+
+      // 3. Disassociate pilot from historical missions (completed, failed) so mission logs remain intact
+      await tx.mission.updateMany({
+        where: { pilotId },
+        data: { pilotId: null },
+      });
+
+      // 4. Delete pilot profile
+      await tx.pilotProfile.deleteMany({
+        where: { userId: pilotId },
+      });
+
+      // 5. Delete user
+      await tx.user.delete({
+        where: { userId: pilotId },
+      });
+    });
+
+    logActivity({
+      userId: requestUser?.userId,
+      action: "PILOT_DELETED",
+      entityType: "PILOT",
+      entityId: pilotId,
+      details: `Pilot #${pilotId} (${pilot.email}) and associated credentials/profiles were deleted.`,
+    });
+
+    return {
+      userId: pilot.userId,
+      email: pilot.email,
+      name: `${pilot.firstName} ${pilot.lastName}`.trim(),
+    };
+  }
 }
+
 

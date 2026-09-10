@@ -96,4 +96,16 @@ router.get(
   FarmerController.getFarmerPayments
 );
 
+/**
+ * @route   DELETE /farmers/:id
+ * @desc    Delete farmer profile, registered fields, history, and account
+ * @access  Private (Admin or Respective Farmer)
+ */
+router.delete(
+  "/:id",
+  authorize("Admin", "Farmer"),
+  validateParams(farmerIdParamSchema),
+  FarmerController.deleteFarmer
+);
+
 export default router;

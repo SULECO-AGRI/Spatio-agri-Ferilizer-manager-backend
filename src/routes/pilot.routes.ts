@@ -153,4 +153,16 @@ router.get(
   PilotController.getPilotReviews
 );
 
+/**
+ * @route   DELETE /pilots/:id
+ * @desc    Delete pilot profile, credentials, and user account
+ * @access  Private (Admin or Respective Pilot)
+ */
+router.delete(
+  "/:id",
+  authorize("Admin", "Pilot"),
+  validateParams(pilotIdParamSchema),
+  PilotController.deletePilot
+);
+
 export default router;

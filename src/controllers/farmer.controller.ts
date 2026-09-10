@@ -4,6 +4,8 @@ import {
   FarmerCacheService,
   FARMER_CACHE_TTL,
 } from "../services/farmer-cache.service";
+import { FieldCacheService } from "../services/field-cache.service";
+import { ServiceRequestCacheService } from "../services/service-request-cache.service";
 import { AdminAnalyticsCacheService } from "../services/admin-analytics-cache.service";
 import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -165,4 +167,36 @@ export class FarmerController {
       );
     }
   );
+
+  /**
+   * DELETE /farmers/:id
+   * Delete farmer profile, fields, history, and account
+   * Access: Admin (for any farmer) or Farmer (for their own account only)
+   */
+  public static deleteFarmer = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const farmerId = Number(req.params.id);
+      const deletedFarmer = await FarmerService.deleteFarmer(
+        farmerId,
+        req.user
+      );
+
+      // Event-driven Redis cache purging across farmer, fields, service requests, and admin analytics
+      Promise.allSettled([
+        FarmerCacheService.invalidateFarmerCaches(farmerId),
+        FieldCacheService.invalidateFieldCaches(undefined, farmerId),
+        ServiceRequestCacheService.invalidateServiceRequestCaches(),
+        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
+      ]).catch((err) => {
+        console.warn("[FarmerController] Cache invalidation warning:", err.message);
+      });
+
+      sendSuccess(
+        res,
+        { farmer: deletedFarmer },
+        "Farmer account and associated records deleted successfully."
+      );
+    }
+  );
 }
+

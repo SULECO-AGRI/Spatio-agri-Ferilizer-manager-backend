@@ -592,6 +592,20 @@
             "description": "Retrieves performance reviews and customer satisfaction ratings for the pilot."
           },
           "response": []
+        },
+        {
+          "name": "4.10 Delete Pilot",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/{{pilotId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "{{pilotId}}"]
+            },
+            "description": "Deletes pilot profile, duty credentials, and user account. Safeguard prevents deletion if pilot is on mission or has active assignments. Access: Admin or target Pilot."
+          },
+          "response": []
         }
       ]
     },
@@ -701,6 +715,20 @@
               ]
             },
             "description": "Lists billing records, payment status, and invoices for the farmer."
+          },
+          "response": []
+        },
+        {
+          "name": "5.7 Delete Farmer",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/farmers/{{farmerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "{{farmerId}}"]
+            },
+            "description": "Deletes farmer profile, registered fields, history, and user account. Safeguard prevents deletion if farmer has active service requests or ongoing missions. Access: Admin or target Farmer."
           },
           "response": []
         }
