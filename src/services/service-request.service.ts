@@ -14,16 +14,17 @@ import {
 } from "../types/service-request.types";
 import { JwtPayload } from "../types/auth.types";
 import {
-  ServiceRequestCacheService,
-  SERVICE_REQUEST_CACHE_TTL,
-} from "./service-request-cache.service";
-import {
   extractFieldCentroid,
   calculateHaversineDistance,
   calculatePilotMatchScore,
   DEFAULT_BASE_COORDINATES,
 } from "./pilot-ranking.service";
-import { CacheService } from "../utils/cache";
+import {
+  CacheService,
+  CacheKeyBuilder,
+  CACHE_TTL,
+  CacheInvalidator,
+} from "../utils/cache";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
 import {
@@ -39,7 +40,6 @@ import {
   MissionStatus,
   PilotStatus,
 } from "../generated/prisma/enums";
-
 
 export class ServiceRequestService {
   /**
@@ -84,7 +84,6 @@ export class ServiceRequestService {
           : `Field with ID ${dto.fieldId} not found.`
       );
     }
-
 
     // 2. Calculate estimated cost if not specified (Standard agricultural rate: LKR 2,500/acre)
     const areaVal = Number(field.area) || 1;
@@ -141,6 +140,10 @@ export class ServiceRequestService {
       details: `Service request ${newRequest.requestCode} created for ${newRequest.field.fieldName} (${newRequest.field.cropType}).`,
     });
 
+    // Invalidate affected caches
+    await CacheInvalidator.invalidateServiceRequest(newRequest.requestId);
+    await CacheInvalidator.invalidateFarmer(userId);
+    await CacheInvalidator.invalidateAdminAnalytics();
 
     return {
       requestId: newRequest.requestId,
@@ -186,171 +189,172 @@ export class ServiceRequestService {
       throw AppError.unauthorized("Authentication required.");
     }
 
-    // Keyset / Cursor Pagination branch
-    if (query.cursor !== undefined || (query.take !== undefined && query.page === undefined)) {
-      return this.getServiceRequestsCursor(query, requestUser);
-    }
+    const isCursorMode =
+      query.cursor !== undefined ||
+      (query.take !== undefined && query.page === undefined);
 
-    // Standard Offset Pagination branch
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = isCursorMode
+      ? CacheKeyBuilder.serviceRequest.cursor(query, requestUser)
+      : CacheKeyBuilder.serviceRequest.list(query, requestUser);
 
-    const userRole = requestUser.role.toLowerCase();
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.SERVICE_REQUEST.LIST_SECONDS,
+      async () => {
+        // Keyset / Cursor Pagination branch
+        if (isCursorMode) {
+          return this.getServiceRequestsCursor(query, requestUser);
+        }
 
-    // Base filter according to RBAC
-    const whereClause: any = {};
+        // Standard Offset Pagination branch
+        const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    if (userRole === "farmer") {
-      whereClause.field = {
-        farmerId: requestUser.userId,
-      };
-    } else if (userRole === "pilot") {
-      whereClause.missions = {
-        some: {
-          pilotId: requestUser.userId,
-        },
-      };
-    } else if (userRole === "admin") {
-      if (query.farmerId) {
-        whereClause.field = {
-          farmerId: Number(query.farmerId),
+        const userRole = requestUser.role.toLowerCase();
+
+        // Base filter according to RBAC
+        const whereClause: any = {};
+
+        if (userRole === "farmer") {
+          whereClause.field = {
+            farmerId: requestUser.userId,
+          };
+        } else if (userRole === "pilot") {
+          whereClause.missions = {
+            some: {
+              pilotId: requestUser.userId,
+            },
+          };
+        } else if (userRole === "admin") {
+          if (query.farmerId) {
+            whereClause.field = {
+              farmerId: Number(query.farmerId),
+            };
+          }
+        }
+
+        if (query.status) {
+          whereClause.status = query.status as RequestStatus;
+        }
+
+        if (query.priority) {
+          whereClause.priority = query.priority as RequestPriority;
+        }
+
+        if (query.serviceType) {
+          whereClause.serviceType = query.serviceType as ServiceType;
+        }
+
+        if (query.fieldId) {
+          whereClause.fieldId = Number(query.fieldId);
+        }
+
+        if (query.startDate || query.endDate) {
+          whereClause.preferredDate = {};
+          if (query.startDate) {
+            whereClause.preferredDate.gte = new Date(query.startDate);
+          }
+          if (query.endDate) {
+            whereClause.preferredDate.lte = new Date(query.endDate);
+          }
+        }
+
+        if (query.search && query.search.trim() !== "") {
+          const searchTerm = query.search.trim();
+          whereClause.OR = [
+            { requestCode: { contains: searchTerm, mode: "insensitive" } },
+            {
+              field: {
+                OR: [
+                  { fieldName: { contains: searchTerm, mode: "insensitive" } },
+                  { cropType: { contains: searchTerm, mode: "insensitive" } },
+                  { district: { contains: searchTerm, mode: "insensitive" } },
+                  {
+                    farmer: {
+                      user: {
+                        OR: [
+                          { firstName: { contains: searchTerm, mode: "insensitive" } },
+                          { lastName: { contains: searchTerm, mode: "insensitive" } },
+                          { mobile: { contains: searchTerm, mode: "insensitive" } },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ];
+        }
+
+        // Dynamic sorting
+        const sortBy = query.sortBy || "createdAt";
+        const sortOrder = query.sortOrder || "desc";
+        const orderBy: any = { [sortBy]: sortOrder };
+
+        const [total, requests, statusCounts] = await Promise.all([
+          prisma.serviceRequest.count({ where: whereClause }),
+          prisma.serviceRequest.findMany({
+            where: whereClause,
+            skip,
+            take: limit,
+            orderBy,
+            include: {
+              field: {
+                include: {
+                  farmer: {
+                    include: {
+                      user: {
+                        select: {
+                          userId: true,
+                          firstName: true,
+                          lastName: true,
+                          email: true,
+                          mobile: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              missions: {
+                include: {
+                  pilot: {
+                    include: {
+                      user: {
+                        select: {
+                          userId: true,
+                          firstName: true,
+                          lastName: true,
+                          mobile: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          this.getStatusCounts(requestUser),
+        ]);
+
+        const items: ServiceRequestListItemDTO[] = requests.map((req) =>
+          this.mapToListItemDTO(req)
+        );
+
+        const pagination = buildPaginationMeta(total, page, limit);
+
+        return {
+          requests: items,
+          summary: {
+            totalPending: statusCounts.pending,
+            totalAssigned: statusCounts.assigned,
+            totalInProgress: statusCounts.inProgress,
+            totalCompleted: statusCounts.completed,
+            totalCancelled: statusCounts.cancelled,
+          },
+          pagination,
         };
       }
-    }
-
-    if (query.status) {
-      whereClause.status = query.status as RequestStatus;
-    }
-
-    if (query.priority) {
-      whereClause.priority = query.priority as RequestPriority;
-    }
-
-    if (query.serviceType) {
-      whereClause.serviceType = query.serviceType as ServiceType;
-    }
-
-    if (query.fieldId) {
-      whereClause.fieldId = Number(query.fieldId);
-    }
-
-    if (query.startDate || query.endDate) {
-      whereClause.preferredDate = {};
-      if (query.startDate) {
-        whereClause.preferredDate.gte = new Date(query.startDate);
-      }
-      if (query.endDate) {
-        whereClause.preferredDate.lte = new Date(query.endDate);
-      }
-    }
-
-    if (query.search && query.search.trim() !== "") {
-      const searchTerm = query.search.trim();
-      whereClause.OR = [
-        { requestCode: { contains: searchTerm, mode: "insensitive" } },
-        {
-          field: {
-            OR: [
-              { fieldName: { contains: searchTerm, mode: "insensitive" } },
-              { cropType: { contains: searchTerm, mode: "insensitive" } },
-              { district: { contains: searchTerm, mode: "insensitive" } },
-              {
-                farmer: {
-                  user: {
-                    OR: [
-                      { firstName: { contains: searchTerm, mode: "insensitive" } },
-                      { lastName: { contains: searchTerm, mode: "insensitive" } },
-                      { mobile: { contains: searchTerm, mode: "insensitive" } },
-                    ],
-                  },
-                },
-              },
-            ],
-          },
-        },
-      ];
-    }
-
-    // Dynamic sorting
-    const sortBy = query.sortBy || "createdAt";
-    const sortOrder = query.sortOrder || "desc";
-    const orderBy: any = { [sortBy]: sortOrder };
-
-    // Base query for summary counts (scoped by user permissions)
-    const baseScopeWhere =
-      userRole === "farmer"
-        ? { field: { farmerId: requestUser.userId } }
-        : userRole === "pilot"
-        ? { missions: { some: { pilotId: requestUser.userId } } }
-        : {};
-
-    const [total, requests, statusCounts] = await Promise.all([
-      prisma.serviceRequest.count({ where: whereClause }),
-      prisma.serviceRequest.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          field: {
-            include: {
-              farmer: {
-                include: {
-                  user: {
-                    select: {
-                      userId: true,
-                      firstName: true,
-                      lastName: true,
-                      email: true,
-                      mobile: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          missions: {
-            include: {
-              pilot: {
-                include: {
-                  user: {
-                    select: {
-                      userId: true,
-                      firstName: true,
-                      lastName: true,
-                      mobile: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
-      CacheService.getCachedOrFetch({
-        key: ServiceRequestCacheService.buildStatusCountsCacheKey(requestUser),
-        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.COUNTS_SECONDS,
-        fetchFn: () => this.getStatusCounts(requestUser),
-      }).then((r) => r.data),
-    ]);
-
-    const items: ServiceRequestListItemDTO[] = requests.map((req) =>
-      this.mapToListItemDTO(req)
     );
-
-    const pagination = buildPaginationMeta(total, page, limit);
-
-
-    return {
-      requests: items,
-      summary: {
-        totalPending: statusCounts.pending,
-        totalAssigned: statusCounts.assigned,
-        totalInProgress: statusCounts.inProgress,
-        totalCompleted: statusCounts.completed,
-        totalCancelled: statusCounts.cancelled,
-      },
-      pagination,
-    };
   }
 
   /**
@@ -476,14 +480,6 @@ export class ServiceRequestService {
       }
     }
 
-    // Base query for summary counts (scoped by user permissions)
-    const baseScopeWhere =
-      userRole === "farmer"
-        ? { field: { farmerId: requestUser.userId } }
-        : userRole === "pilot"
-        ? { missions: { some: { pilotId: requestUser.userId } } }
-        : {};
-
     const [requests, statusCounts] = await Promise.all([
       prisma.serviceRequest.findMany({
         where: whereClause,
@@ -528,11 +524,7 @@ export class ServiceRequestService {
           },
         },
       }),
-      CacheService.getCachedOrFetch({
-        key: ServiceRequestCacheService.buildStatusCountsCacheKey(requestUser),
-        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.COUNTS_SECONDS,
-        fetchFn: () => this.getStatusCounts(requestUser),
-      }).then((r) => r.data),
+      this.getStatusCounts(requestUser),
     ]);
 
     const hasExtraRow = requests.length > limit;
@@ -546,7 +538,6 @@ export class ServiceRequestService {
     );
 
     const startCursor =
-
       items.length > 0
         ? encodeCursor({
             id: items[0].requestId,
@@ -590,155 +581,163 @@ export class ServiceRequestService {
     requestId: number,
     requestUser?: JwtPayload
   ): Promise<ServiceRequestDetailDTO> {
-    if (!requestUser) {
-      throw AppError.unauthorized("Authentication required.");
-    }
+    const cacheKey = CacheKeyBuilder.serviceRequest.detail(requestId);
 
-    const request = await prisma.serviceRequest.findUnique({
-      where: { requestId },
-      include: {
-        field: {
+    const request = await CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.SERVICE_REQUEST.DETAIL_SECONDS,
+      async () => {
+        const req = await prisma.serviceRequest.findUnique({
+          where: { requestId },
           include: {
-            farmer: {
+            field: {
               include: {
-                user: {
+                farmer: {
+                  include: {
+                    user: {
+                      select: {
+                        userId: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        mobile: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            missions: {
+              include: {
+                assignedByUser: {
                   select: {
                     userId: true,
                     firstName: true,
                     lastName: true,
                     email: true,
-                    mobile: true,
                   },
                 },
+                pilot: {
+                  include: {
+                    user: {
+                      select: {
+                        userId: true,
+                        firstName: true,
+                        lastName: true,
+                        mobile: true,
+                      },
+                    },
+                  },
+                },
+                payment: true,
+                review: true,
               },
             },
           },
-        },
-        missions: {
-          include: {
-            assignedByUser: {
-              select: {
-                userId: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-            pilot: {
-              include: {
-                user: {
-                  select: {
-                    userId: true,
-                    firstName: true,
-                    lastName: true,
-                    mobile: true,
-                  },
-                },
-              },
-            },
-            payment: true,
-            review: true,
-          },
-        },
-      },
-    });
+        });
 
-    if (!request) {
-      throw AppError.notFound(`Service request with ID ${requestId} not found.`);
-    }
+        if (!req) {
+          throw AppError.notFound(`Service request with ID ${requestId} not found.`);
+        }
+
+        const farmerUser = req.field.farmer.user;
+
+        return {
+          requestId: req.requestId,
+          requestCode: req.requestCode,
+          serviceType: req.serviceType,
+          preferredDate: req.preferredDate,
+          priority: req.priority,
+          status: req.status,
+          estimatedCost: Number(req.estimatedCost),
+          farmer: {
+            userId: farmerUser.userId,
+            fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
+            email: farmerUser.email,
+            mobile: farmerUser.mobile,
+            nic: req.field.farmer.nic,
+            address: req.field.farmer.address,
+            memberSince: req.field.farmer.memberSince,
+          },
+          field: {
+            id: req.field.id,
+            fieldName: req.field.fieldName,
+            cropType: req.field.cropType,
+            area: Number(req.field.area),
+            locationCoordinates: req.field.locationCoordinates,
+            district: req.field.district,
+            province: req.field.province,
+            city: req.field.city,
+            village: req.field.village,
+            createdAt: req.field.createdAt,
+          },
+          missions: req.missions.map((m) => ({
+            missionId: m.missionId,
+            status: m.status,
+            startedAt: m.startedAt,
+            completedAt: m.completedAt,
+            areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
+            pilotNotes: m.pilotNotes,
+            assignedBy: m.assignedByUser
+              ? {
+                  userId: m.assignedByUser.userId,
+                  fullName: `${m.assignedByUser.firstName} ${m.assignedByUser.lastName}`.trim(),
+                  email: m.assignedByUser.email,
+                }
+              : null,
+            pilot: m.pilot
+              ? {
+                  userId: m.pilot.userId,
+                  fullName: `${m.pilot.user.firstName} ${m.pilot.user.lastName}`.trim(),
+                  mobile: m.pilot.user.mobile,
+                  licenceNumber: m.pilot.licenceNumber,
+                  status: m.pilot.status,
+                  ratings: m.pilot.ratings ? Number(m.pilot.ratings) : null,
+                }
+              : null,
+            payment: m.payment
+              ? {
+                  paymentId: m.payment.paymentId,
+                  totalAmount: Number(m.payment.totalAmount),
+                  companyCommission: Number(m.payment.companyCommission),
+                  pilotEarnings: Number(m.payment.pilotEarnings),
+                  paymentStatus: m.payment.paymentStatus,
+                  paymentMethod: m.payment.paymentMethod,
+                  payoutStatus: m.payment.payoutStatus,
+                  paidAt: m.payment.paidAt,
+                }
+              : null,
+            review: m.review
+              ? {
+                  reviewId: m.review.reviewId,
+                  rating: m.review.rating,
+                  comment: m.review.comment,
+                  createdAt: m.review.createdAt,
+                }
+              : null,
+            createdAt: m.createdAt,
+          })),
+          createdAt: req.createdAt,
+          updatedAt: req.updatedAt,
+        };
+      }
+    );
 
     // IDOR Protection: Farmer can only access own request; Pilot can access assigned request
-    const userRole = requestUser.role.toLowerCase();
-    if (userRole === "farmer" && request.field.farmerId !== requestUser.userId) {
-      throw AppError.forbidden("Access denied. You can only view your own service requests.");
-    }
-    if (
-      userRole === "pilot" &&
-      !request.missions.some((m) => m.pilotId === requestUser.userId)
-    ) {
-      throw AppError.forbidden("Access denied. You can only view service requests assigned to you.");
+    if (requestUser) {
+      const userRole = requestUser.role.toLowerCase();
+      if (userRole === "farmer" && request.farmer.userId !== requestUser.userId) {
+        throw AppError.forbidden("Access denied. You can only view your own service requests.");
+      }
+      if (
+        userRole === "pilot" &&
+        !request.missions.some((m) => m.pilot?.userId === requestUser.userId)
+      ) {
+        throw AppError.forbidden("Access denied. You can only view service requests assigned to you.");
+      }
     }
 
-    const farmerUser = request.field.farmer.user;
-
-    return {
-      requestId: request.requestId,
-      requestCode: request.requestCode,
-      serviceType: request.serviceType,
-      preferredDate: request.preferredDate,
-      priority: request.priority,
-      status: request.status,
-      estimatedCost: Number(request.estimatedCost),
-      farmer: {
-        userId: farmerUser.userId,
-        fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
-        email: farmerUser.email,
-        mobile: farmerUser.mobile,
-        nic: request.field.farmer.nic,
-        address: request.field.farmer.address,
-        memberSince: request.field.farmer.memberSince,
-      },
-      field: {
-        id: request.field.id,
-        fieldName: request.field.fieldName,
-        cropType: request.field.cropType,
-        area: Number(request.field.area),
-        locationCoordinates: request.field.locationCoordinates,
-        district: request.field.district,
-        province: request.field.province,
-        city: request.field.city,
-        village: request.field.village,
-        createdAt: request.field.createdAt,
-      },
-      missions: request.missions.map((m) => ({
-        missionId: m.missionId,
-        status: m.status,
-        startedAt: m.startedAt,
-        completedAt: m.completedAt,
-        areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
-        pilotNotes: m.pilotNotes,
-        assignedBy: m.assignedByUser
-          ? {
-              userId: m.assignedByUser.userId,
-              fullName: `${m.assignedByUser.firstName} ${m.assignedByUser.lastName}`.trim(),
-              email: m.assignedByUser.email,
-            }
-          : null,
-        pilot: m.pilot
-          ? {
-              userId: m.pilot.userId,
-              fullName: `${m.pilot.user.firstName} ${m.pilot.user.lastName}`.trim(),
-              mobile: m.pilot.user.mobile,
-              licenceNumber: m.pilot.licenceNumber,
-              status: m.pilot.status,
-              ratings: m.pilot.ratings ? Number(m.pilot.ratings) : null,
-            }
-          : null,
-        payment: m.payment
-          ? {
-              paymentId: m.payment.paymentId,
-              totalAmount: Number(m.payment.totalAmount),
-              companyCommission: Number(m.payment.companyCommission),
-              pilotEarnings: Number(m.payment.pilotEarnings),
-              paymentStatus: m.payment.paymentStatus,
-              paymentMethod: m.payment.paymentMethod,
-              payoutStatus: m.payment.payoutStatus,
-              paidAt: m.payment.paidAt,
-            }
-          : null,
-        review: m.review
-          ? {
-              reviewId: m.review.reviewId,
-              rating: m.review.rating,
-              comment: m.review.comment,
-              createdAt: m.review.createdAt,
-            }
-          : null,
-        createdAt: m.createdAt,
-      })),
-      createdAt: request.createdAt,
-      updatedAt: request.updatedAt,
-    };
+    return request;
   }
 
   /**
@@ -818,7 +817,9 @@ export class ServiceRequestService {
     // 6. Compute distance & composite match score for each candidate
     const candidates: CandidatePilotDTO[] = availablePilots.map((pilot) => {
       const profile = pilot.pilotProfile!;
-      const pilotBaseCoords = DEFAULT_BASE_COORDINATES;
+      const pilotBaseCoords = profile.serviceArea
+        ? extractFieldCentroid(profile.serviceArea)
+        : DEFAULT_BASE_COORDINATES;
 
       const distanceKm = calculateHaversineDistance(
         fieldCentroid.lat,
@@ -843,7 +844,8 @@ export class ServiceRequestService {
         fullName: `${pilot.firstName} ${pilot.lastName}`.trim(),
         email: pilot.email,
         mobile: pilot.mobile,
-        licenceNumber: profile.licenceNumber,
+        licenceNumber: profile.licenceNumber ?? null,
+        serviceArea: profile.serviceArea ?? null,
         status: profile.status,
         rating: ratingNum,
         distanceKm,
@@ -959,13 +961,19 @@ export class ServiceRequestService {
       });
     });
 
+    const pilotBadge = pilot.pilotProfile.licenceNumber ? ` (${pilot.pilotProfile.licenceNumber})` : "";
     logActivity({
       userId: adminUserId,
       action: "PILOT_ASSIGNED",
       entityType: "SERVICE_REQUEST",
       entityId: requestId,
-      details: `Pilot ${pilot.firstName} ${pilot.lastName} (${pilot.pilotProfile.licenceNumber}) assigned to request ${serviceRequest.requestCode}.`,
+      details: `Pilot ${pilot.firstName} ${pilot.lastName}${pilotBadge} assigned to request ${serviceRequest.requestCode}.`,
     });
+
+    await CacheInvalidator.invalidateServiceRequest(requestId);
+    await CacheInvalidator.invalidatePilot(dto.pilotId);
+    await CacheInvalidator.invalidateFarmer();
+    await CacheInvalidator.invalidateAdminAnalytics();
 
     return this.getServiceRequestById(requestId, {
       userId: adminUserId,
@@ -1025,6 +1033,10 @@ export class ServiceRequestService {
       details: `Service request ${serviceRequest.requestCode} status updated to ${dto.status} by ${requestUser.role}.`,
     });
 
+    await CacheInvalidator.invalidateServiceRequest(requestId);
+    await CacheInvalidator.invalidateFarmer();
+    await CacheInvalidator.invalidateAdminAnalytics();
+
     return this.getServiceRequestById(requestId, requestUser);
   }
 
@@ -1040,63 +1052,71 @@ export class ServiceRequestService {
       throw AppError.unauthorized("Authentication required.");
     }
 
-    const userRole = requestUser.role.toLowerCase();
+    const cacheKey = CacheKeyBuilder.serviceRequest.statusCounts(requestUser);
 
-    // Base scope filter according to RBAC tenancy
-    const baseScopeWhere: any =
-      userRole === "farmer"
-        ? { field: { farmerId: requestUser.userId } }
-        : userRole === "pilot"
-        ? { missions: { some: { pilotId: requestUser.userId } } }
-        : {};
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.SERVICE_REQUEST.COUNTS_SECONDS,
+      async () => {
+        const userRole = requestUser.role.toLowerCase();
 
-    const groupCounts = await prisma.serviceRequest.groupBy({
-      by: ["status"],
-      where: baseScopeWhere,
-      _count: { status: true },
-    });
+        // Base scope filter according to RBAC tenancy
+        const baseScopeWhere: any =
+          userRole === "farmer"
+            ? { field: { farmerId: requestUser.userId } }
+            : userRole === "pilot"
+            ? { missions: { some: { pilotId: requestUser.userId } } }
+            : {};
 
-    let pending = 0;
-    let assigned = 0;
-    let inProgress = 0;
-    let completed = 0;
-    let cancelled = 0;
-    let rejected = 0;
+        const groupCounts = await prisma.serviceRequest.groupBy({
+          by: ["status"],
+          where: baseScopeWhere,
+          _count: { status: true },
+        });
 
-    for (const item of groupCounts) {
-      switch (item.status) {
-        case RequestStatus.PENDING:
-          pending = item._count.status;
-          break;
-        case RequestStatus.ASSIGNED:
-          assigned = item._count.status;
-          break;
-        case RequestStatus.IN_PROGRESS:
-          inProgress = item._count.status;
-          break;
-        case RequestStatus.COMPLETED:
-          completed = item._count.status;
-          break;
-        case RequestStatus.CANCELLED:
-          cancelled = item._count.status;
-          break;
-        case RequestStatus.REJECTED:
-          rejected = item._count.status;
-          break;
+        let pending = 0;
+        let assigned = 0;
+        let inProgress = 0;
+        let completed = 0;
+        let cancelled = 0;
+        let rejected = 0;
+
+        for (const item of groupCounts) {
+          switch (item.status) {
+            case RequestStatus.PENDING:
+              pending = item._count.status;
+              break;
+            case RequestStatus.ASSIGNED:
+              assigned = item._count.status;
+              break;
+            case RequestStatus.IN_PROGRESS:
+              inProgress = item._count.status;
+              break;
+            case RequestStatus.COMPLETED:
+              completed = item._count.status;
+              break;
+            case RequestStatus.CANCELLED:
+              cancelled = item._count.status;
+              break;
+            case RequestStatus.REJECTED:
+              rejected = item._count.status;
+              break;
+          }
+        }
+
+        const total = pending + assigned + inProgress + completed + cancelled + rejected;
+
+        return {
+          pending,
+          assigned,
+          inProgress,
+          completed,
+          cancelled,
+          rejected,
+          total,
+        };
       }
-    }
-
-    const total = pending + assigned + inProgress + completed + cancelled + rejected;
-
-    return {
-      pending,
-      assigned,
-      inProgress,
-      completed,
-      cancelled,
-      rejected,
-      total,
-    };
+    );
   }
 
   /**

@@ -11,6 +11,7 @@ import {
 import { generateToken } from "../utils/jwt";
 import { AppError } from "../utils/AppError";
 import { hashPassword, comparePassword } from "../utils/password";
+import { CacheInvalidator } from "../utils/cache";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -46,7 +47,8 @@ export class AuthService {
     } else if (user.pilotProfile) {
       profile = {
         userId: user.pilotProfile.userId,
-        licenceNumber: user.pilotProfile.licenceNumber,
+        licenceNumber: user.pilotProfile.licenceNumber ?? null,
+        serviceArea: user.pilotProfile.serviceArea ?? null,
         status: user.pilotProfile.status,
         ratings: user.pilotProfile.ratings,
         completedMissions: user.pilotProfile.completedMissions,
@@ -164,6 +166,14 @@ export class AuthService {
       role: userResponse.role,
     });
 
+    // Invalidate farmer directory list caches and admin analytics on new farmer registration
+    Promise.allSettled([
+      CacheInvalidator.invalidateFarmer(),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[AuthService] Cache invalidation warning:", err.message);
+    });
+
     return {
       user: userResponse,
       token,
@@ -175,10 +185,17 @@ export class AuthService {
    */
   public static async registerPilot(dto: RegisterPilotDTO): Promise<AuthResponse> {
     const { email, password, firstName, lastName, mobile, licenceNumber, totalFlightHours } = dto;
+    const serviceArea =
+      dto.serviceArea ??
+      dto.service_area ??
+      dto.coverageArea ??
+      dto.locationCoordinates ??
+      dto.location_coordinates ??
+      null;
 
-    if (!email || !password || !firstName || !lastName || !mobile || !licenceNumber) {
+    if (!email || !password || !firstName || !lastName || !mobile) {
       throw AppError.badRequest(
-        "Missing required fields: email, password, firstName, lastName, mobile, and licenceNumber are required."
+        "Missing required fields: email, password, firstName, lastName, and mobile are required."
       );
     }
 
@@ -205,12 +222,15 @@ export class AuthService {
       );
     }
 
-    // Check duplicate licenceNumber
-    const existingLicence = await prisma.pilotProfile.findUnique({
-      where: { licenceNumber },
-    });
-    if (existingLicence) {
-      throw AppError.conflict("A pilot with this license number already exists.");
+    // Check duplicate licenceNumber if provided
+    const formattedLicence = licenceNumber && licenceNumber.trim().length > 0 ? licenceNumber.trim() : null;
+    if (formattedLicence) {
+      const existingLicence = await prisma.pilotProfile.findUnique({
+        where: { licenceNumber: formattedLicence },
+      });
+      if (existingLicence) {
+        throw AppError.conflict("A pilot with this license number already exists.");
+      }
     }
 
     // Find Pilot role
@@ -241,7 +261,8 @@ export class AuthService {
       const profile = await tx.pilotProfile.create({
         data: {
           userId: user.userId,
-          licenceNumber,
+          licenceNumber: formattedLicence,
+          serviceArea: serviceArea as any,
           status: PilotStatus.INACTIVE,
           totalFlightHours: totalFlightHours || 0.0,
         },
@@ -259,6 +280,14 @@ export class AuthService {
       userId: userResponse.userId,
       email: userResponse.email,
       role: userResponse.role,
+    });
+
+    // Invalidate pilot directory list caches and admin analytics on new pilot registration
+    Promise.allSettled([
+      CacheInvalidator.invalidatePilot(),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[AuthService] Cache invalidation warning:", err.message);
     });
 
     return {

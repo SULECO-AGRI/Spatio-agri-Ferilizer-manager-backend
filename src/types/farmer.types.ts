@@ -107,7 +107,7 @@ export interface ServiceMissionDTO {
     userId: number;
     name: string;
     mobile: string;
-    licenceNumber: string;
+    licenceNumber: string | null;
   } | null;
   payment: {
     paymentId: number;

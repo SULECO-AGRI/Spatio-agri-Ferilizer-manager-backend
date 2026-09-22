@@ -58,7 +58,7 @@ export interface TodayScheduleItemDTO {
     userId: number;
     fullName: string;
     mobile: string;
-    licenceNumber: string;
+    licenceNumber: string | null;
     status: string;
   } | null;
 }

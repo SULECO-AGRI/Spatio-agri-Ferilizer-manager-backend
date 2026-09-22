@@ -1,4 +1,4 @@
-import { PaginationMeta } from "./farmer.types";
+import { PaginationMeta } from "./common.types";
 
 export interface PilotQueryDTO {
   page?: number;
@@ -16,7 +16,8 @@ export interface PilotListItemDTO {
   lastName: string;
   fullName: string;
   mobile: string;
-  licenceNumber: string;
+  licenceNumber: string | null;
+  serviceArea?: any;
   status: string;
   ratings: number | null;
   completedMissions: number;
@@ -45,7 +46,8 @@ export interface PilotProfileDetailDTO {
   lastName: string;
   fullName: string;
   mobile: string;
-  licenceNumber: string;
+  licenceNumber: string | null;
+  serviceArea?: any;
   status: string;
   role: string;
   stats: PilotStatsDTO;

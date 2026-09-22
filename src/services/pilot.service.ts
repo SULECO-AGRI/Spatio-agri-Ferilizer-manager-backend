@@ -13,12 +13,18 @@ import {
   RespondMissionDTO,
   RespondMissionResponseDTO,
 } from "../types/pilot.types";
-import { PaginatedResult } from "../types/farmer.types";
+import { PaginatedResult } from "../types/common.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import { PilotStatus, MissionStatus, PayoutStatus, RequestStatus } from "../generated/prisma/enums";
+import {
+  CacheService,
+  CacheKeyBuilder,
+  CACHE_TTL,
+  CacheInvalidator,
+} from "../utils/cache";
 
 export class PilotService {
   /**
@@ -76,119 +82,125 @@ export class PilotService {
   public static async getAllPilots(
     query: PilotQueryDTO
   ): Promise<PaginatedResult<PilotListItemDTO>> {
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.pilot.list(query);
 
-    const { search, status, sortBy = "createdAt", sortOrder = "desc" } = query;
+    return CacheService.getOrSet(cacheKey, CACHE_TTL.PILOT.LIST_SECONDS, async () => {
+      const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    const whereClause: any = {
-      role: {
-        name: { equals: "Pilot", mode: "insensitive" },
-      },
-    };
+      const { search, status, sortBy = "createdAt", sortOrder = "desc" } = query;
 
-    const andConditions: any[] = [];
-
-    if (status) {
-      andConditions.push({
-        pilotProfile: {
-          status: status as PilotStatus,
+      const whereClause: any = {
+        role: {
+          name: { equals: "Pilot", mode: "insensitive" },
         },
-      });
-    }
+      };
 
-    if (search && search.trim() !== "") {
-      const searchTerm = search.trim();
-      andConditions.push({
-        OR: [
-          { firstName: { contains: searchTerm, mode: "insensitive" } },
-          { lastName: { contains: searchTerm, mode: "insensitive" } },
-          { email: { contains: searchTerm, mode: "insensitive" } },
-          { mobile: { contains: searchTerm, mode: "insensitive" } },
-          {
-            pilotProfile: {
-              licenceNumber: { contains: searchTerm, mode: "insensitive" },
-            },
-          },
-        ],
-      });
-    }
+      const andConditions: any[] = [];
 
-    if (andConditions.length > 0) {
-      whereClause.AND = andConditions;
-    }
-
-    let orderBy: any = { createdAt: sortOrder };
-    if (sortBy === "name") {
-      orderBy = { firstName: sortOrder };
-    } else if (sortBy === "ratings") {
-      orderBy = { pilotProfile: { ratings: sortOrder } };
-    } else if (sortBy === "completedMissions") {
-      orderBy = { pilotProfile: { completedMissions: sortOrder } };
-    } else if (sortBy === "totalFlightHours") {
-      orderBy = { pilotProfile: { totalFlightHours: sortOrder } };
-    }
-
-    const [total, pilots] = await prisma.$transaction([
-      prisma.user.count({ where: whereClause }),
-      prisma.user.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy,
-        select: {
-          userId: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          mobile: true,
-          createdAt: true,
-          updatedAt: true,
+      if (status) {
+        andConditions.push({
           pilotProfile: {
-            select: {
-              licenceNumber: true,
-              status: true,
-              ratings: true,
-              completedMissions: true,
-              totalFlightHours: true,
-              missions: {
-                where: {
-                  status: {
-                    in: [MissionStatus.SCHEDULED, MissionStatus.IN_PROGRESS],
+            status: status as PilotStatus,
+          },
+        });
+      }
+
+      if (search && search.trim() !== "") {
+        const searchTerm = search.trim();
+        andConditions.push({
+          OR: [
+            { firstName: { contains: searchTerm, mode: "insensitive" } },
+            { lastName: { contains: searchTerm, mode: "insensitive" } },
+            { email: { contains: searchTerm, mode: "insensitive" } },
+            { mobile: { contains: searchTerm, mode: "insensitive" } },
+            {
+              pilotProfile: {
+                licenceNumber: { contains: searchTerm, mode: "insensitive" },
+              },
+            },
+          ],
+        });
+      }
+
+      if (andConditions.length > 0) {
+        whereClause.AND = andConditions;
+      }
+
+      let orderBy: any = { createdAt: sortOrder };
+      if (sortBy === "name") {
+        orderBy = { firstName: sortOrder };
+      } else if (sortBy === "ratings") {
+        orderBy = { pilotProfile: { ratings: sortOrder } };
+      } else if (sortBy === "completedMissions") {
+        orderBy = { pilotProfile: { completedMissions: sortOrder } };
+      } else if (sortBy === "totalFlightHours") {
+        orderBy = { pilotProfile: { totalFlightHours: sortOrder } };
+      }
+
+      const [total, pilots] = await prisma.$transaction([
+        prisma.user.count({ where: whereClause }),
+        prisma.user.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          orderBy,
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            mobile: true,
+            createdAt: true,
+            updatedAt: true,
+            pilotProfile: {
+              select: {
+                licenceNumber: true,
+                serviceArea: true,
+                status: true,
+                ratings: true,
+                completedMissions: true,
+                totalFlightHours: true,
+                missions: {
+                  where: {
+                    status: {
+                      in: [MissionStatus.SCHEDULED, MissionStatus.IN_PROGRESS],
+                    },
                   },
+                  select: { missionId: true },
                 },
-                select: { missionId: true },
               },
             },
           },
-        },
-      }),
-    ]);
+        }),
+      ]);
 
-    const items: PilotListItemDTO[] = pilots.map((pilot) => {
-      const profile = pilot.pilotProfile;
-      return {
-        userId: pilot.userId,
-        email: pilot.email,
-        firstName: pilot.firstName,
-        lastName: pilot.lastName,
-        fullName: `${pilot.firstName} ${pilot.lastName}`.trim(),
-        mobile: pilot.mobile,
-        licenceNumber: profile?.licenceNumber || "N/A",
-        status: profile?.status || "INACTIVE",
-        ratings: profile?.ratings !== null && profile?.ratings !== undefined ? Number(profile.ratings) : null,
-        completedMissions: profile?.completedMissions !== null && profile?.completedMissions !== undefined ? Number(profile.completedMissions) : 0,
-        totalFlightHours: profile?.totalFlightHours !== null && profile?.totalFlightHours !== undefined
-          ? Number(profile.totalFlightHours)
-          : 0,
-        activeMissionsCount: profile?.missions ? profile.missions.length : 0,
-        createdAt: pilot.createdAt,
-        updatedAt: pilot.updatedAt,
-      };
+      const items: PilotListItemDTO[] = pilots.map((pilot) => {
+        const profile = pilot.pilotProfile;
+        return {
+          userId: pilot.userId,
+          email: pilot.email,
+          firstName: pilot.firstName,
+          lastName: pilot.lastName,
+          fullName: `${pilot.firstName} ${pilot.lastName}`.trim(),
+          mobile: pilot.mobile,
+          licenceNumber: profile?.licenceNumber ?? null,
+          serviceArea: profile?.serviceArea ?? null,
+          status: profile?.status || "INACTIVE",
+          ratings: profile?.ratings !== null && profile?.ratings !== undefined ? Number(profile.ratings) : null,
+          completedMissions: profile?.completedMissions !== null && profile?.completedMissions !== undefined ? Number(profile.completedMissions) : 0,
+          totalFlightHours: profile?.totalFlightHours !== null && profile?.totalFlightHours !== undefined
+            ? Number(profile.totalFlightHours)
+            : 0,
+          activeMissionsCount: profile?.missions ? profile.missions.length : 0,
+          createdAt: pilot.createdAt,
+          updatedAt: pilot.updatedAt,
+        };
+      });
+
+      const pagination = buildPaginationMeta(total, page, limit);
+
+      return { items, pagination };
     });
-
-    const pagination = buildPaginationMeta(total, page, limit);
-
-    return { items, pagination };
   }
 
   /**
@@ -203,100 +215,106 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const user = await prisma.user.findUnique({
-      where: { userId: pilotId },
-      select: {
-        userId: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        mobile: true,
-        createdAt: true,
-        updatedAt: true,
-        role: {
-          select: { name: true },
-        },
-        pilotProfile: {
-          select: {
-            licenceNumber: true,
-            status: true,
-            ratings: true,
-            completedMissions: true,
-            totalFlightHours: true,
-            missions: {
-              select: {
-                status: true,
-                payment: {
-                  select: {
-                    pilotEarnings: true,
-                    paymentStatus: true,
+    const cacheKey = CacheKeyBuilder.pilot.detail(pilotId);
+
+    return CacheService.getOrSet(cacheKey, CACHE_TTL.PILOT.DETAIL_SECONDS, async () => {
+      const user = await prisma.user.findUnique({
+        where: { userId: pilotId },
+        select: {
+          userId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          mobile: true,
+          createdAt: true,
+          updatedAt: true,
+          role: {
+            select: { name: true },
+          },
+          pilotProfile: {
+            select: {
+              licenceNumber: true,
+              serviceArea: true,
+              status: true,
+              ratings: true,
+              completedMissions: true,
+              totalFlightHours: true,
+              missions: {
+                select: {
+                  status: true,
+                  payment: {
+                    select: {
+                      pilotEarnings: true,
+                      paymentStatus: true,
+                    },
                   },
                 },
               },
-            },
-            payouts: {
-              where: { status: PayoutStatus.PENDING },
-              select: { amount: true },
-            },
-            reviews: {
-              select: { reviewId: true },
+              payouts: {
+                where: { status: PayoutStatus.PENDING },
+                select: { amount: true },
+              },
+              reviews: {
+                select: { reviewId: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    if (!user || !user.pilotProfile) {
-      throw AppError.notFound(`Pilot profile for ID ${pilotId} not found.`);
-    }
-
-    const profile = user.pilotProfile;
-    const missions = profile.missions || [];
-
-    let scheduledMissions = 0;
-    let inProgressMissions = 0;
-    let failedMissions = 0;
-    let totalEarnings = 0;
-
-    for (const m of missions) {
-      if (m.status === MissionStatus.SCHEDULED) scheduledMissions++;
-      if (m.status === MissionStatus.IN_PROGRESS) inProgressMissions++;
-      if (m.status === MissionStatus.FAILED) failedMissions++;
-
-      if (m.payment && m.payment.paymentStatus === "COMPLETED") {
-        totalEarnings += Number(m.payment.pilotEarnings || 0);
+      if (!user || !user.pilotProfile) {
+        throw AppError.notFound(`Pilot profile for ID ${pilotId} not found.`);
       }
-    }
 
-    const pendingPayouts = (profile.payouts || []).reduce(
-      (sum, p) => sum + Number(p.amount || 0),
-      0
-    );
+      const profile = user.pilotProfile;
+      const missions = profile.missions || [];
 
-    return {
-      userId: user.userId,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      fullName: `${user.firstName} ${user.lastName}`.trim(),
-      mobile: user.mobile,
-      licenceNumber: profile.licenceNumber,
-      status: profile.status,
-      role: user.role.name,
-      stats: {
-        ratings: profile.ratings ? Number(profile.ratings) : null,
-        completedMissions: profile.completedMissions,
-        totalFlightHours: Number(profile.totalFlightHours || 0),
-        scheduledMissions,
-        inProgressMissions,
-        failedMissions,
-        totalEarnings: Number(totalEarnings.toFixed(2)),
-        pendingPayouts: Number(pendingPayouts.toFixed(2)),
-        totalReviews: (profile.reviews || []).length,
-      },
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+      let scheduledMissions = 0;
+      let inProgressMissions = 0;
+      let failedMissions = 0;
+      let totalEarnings = 0;
+
+      for (const m of missions) {
+        if (m.status === MissionStatus.SCHEDULED) scheduledMissions++;
+        if (m.status === MissionStatus.IN_PROGRESS) inProgressMissions++;
+        if (m.status === MissionStatus.FAILED) failedMissions++;
+
+        if (m.payment && m.payment.paymentStatus === "COMPLETED") {
+          totalEarnings += Number(m.payment.pilotEarnings || 0);
+        }
+      }
+
+      const pendingPayouts = (profile.payouts || []).reduce(
+        (sum, p) => sum + Number(p.amount || 0),
+        0
+      );
+
+      return {
+        userId: user.userId,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: `${user.firstName} ${user.lastName}`.trim(),
+        mobile: user.mobile,
+        licenceNumber: profile.licenceNumber ?? null,
+        serviceArea: profile.serviceArea ?? null,
+        status: profile.status,
+        role: user.role.name,
+        stats: {
+          ratings: profile.ratings ? Number(profile.ratings) : null,
+          completedMissions: profile.completedMissions,
+          totalFlightHours: Number(profile.totalFlightHours || 0),
+          scheduledMissions,
+          inProgressMissions,
+          failedMissions,
+          totalEarnings: Number(totalEarnings.toFixed(2)),
+          pendingPayouts: Number(pendingPayouts.toFixed(2)),
+          totalReviews: (profile.reviews || []).length,
+        },
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      };
+    });
   }
 
   /**
@@ -306,7 +324,7 @@ export class PilotService {
     pilotId: number,
     status: PilotStatus,
     requestUser?: JwtPayload
-  ): Promise<{ userId: number; licenceNumber: string; status: string }> {
+  ): Promise<{ userId: number; licenceNumber: string | null; status: string }> {
     if (requestUser) {
       this.validatePilotAccess(requestUser, pilotId);
       // Non-admin pilots cannot suspend their own account
@@ -337,6 +355,8 @@ export class PilotService {
       details: `Pilot status updated to ${status}.`,
     });
 
+    await CacheInvalidator.invalidatePilot(pilotId);
+
     return updated;
   }
 
@@ -353,48 +373,52 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.pilot.missions(pilotId, query);
 
-    const whereClause: any = {
-      pilotId,
-    };
+    return CacheService.getOrSet(cacheKey, CACHE_TTL.PILOT.MISSIONS_SECONDS, async () => {
+      const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    if (query.status) {
-      whereClause.status = query.status as MissionStatus;
-    }
-
-    if (query.startDate || query.endDate) {
-      whereClause.serviceRequest = {
-        preferredDate: {},
+      const whereClause: any = {
+        pilotId,
       };
-      if (query.startDate) {
-        whereClause.serviceRequest.preferredDate.gte = new Date(query.startDate);
-      }
-      if (query.endDate) {
-        whereClause.serviceRequest.preferredDate.lte = new Date(query.endDate);
-      }
-    }
 
-    const [total, missions] = await Promise.all([
-      prisma.mission.count({ where: whereClause }),
-      prisma.mission.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          serviceRequest: {
-            include: {
-              field: {
-                include: {
-                  farmer: {
-                    include: {
-                      user: {
-                        select: {
-                          userId: true,
-                          firstName: true,
-                          lastName: true,
-                          mobile: true,
+      if (query.status) {
+        whereClause.status = query.status as MissionStatus;
+      }
+
+      if (query.startDate || query.endDate) {
+        whereClause.serviceRequest = {
+          preferredDate: {},
+        };
+        if (query.startDate) {
+          whereClause.serviceRequest.preferredDate.gte = new Date(query.startDate);
+        }
+        if (query.endDate) {
+          whereClause.serviceRequest.preferredDate.lte = new Date(query.endDate);
+        }
+      }
+
+      const [total, missions] = await Promise.all([
+        prisma.mission.count({ where: whereClause }),
+        prisma.mission.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+          include: {
+            serviceRequest: {
+              include: {
+                field: {
+                  include: {
+                    farmer: {
+                      include: {
+                        user: {
+                          select: {
+                            userId: true,
+                            firstName: true,
+                            lastName: true,
+                            mobile: true,
+                          },
                         },
                       },
                     },
@@ -402,89 +426,89 @@ export class PilotService {
                 },
               },
             },
-          },
-          payment: {
-            select: {
-              paymentId: true,
-              totalAmount: true,
-              pilotEarnings: true,
-              paymentStatus: true,
-              paymentMethod: true,
-              payoutStatus: true,
+            payment: {
+              select: {
+                paymentId: true,
+                totalAmount: true,
+                pilotEarnings: true,
+                paymentStatus: true,
+                paymentMethod: true,
+                payoutStatus: true,
+              },
+            },
+            review: {
+              select: {
+                reviewId: true,
+                rating: true,
+                comment: true,
+                createdAt: true,
+              },
             },
           },
-          review: {
-            select: {
-              reviewId: true,
-              rating: true,
-              comment: true,
-              createdAt: true,
-            },
+        }),
+      ]);
+
+      const items: PilotMissionItemDTO[] = missions.map((m) => {
+        const sr = m.serviceRequest;
+        const field = sr.field;
+        const farmerUser = field.farmer.user;
+
+        return {
+          missionId: m.missionId,
+          requestId: sr.requestId,
+          requestCode: sr.requestCode,
+          serviceType: sr.serviceType,
+          preferredDate: sr.preferredDate,
+          priority: sr.priority,
+          status: m.status,
+          startedAt: m.startedAt,
+          completedAt: m.completedAt,
+          areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
+          pilotNotes: m.pilotNotes,
+          field: {
+            id: field.id,
+            fieldName: field.fieldName,
+            cropType: field.cropType,
+            area: Number(field.area),
+            locationCoordinates: field.locationCoordinates,
+            district: field.district,
+            province: field.province,
+            city: field.city,
+            village: field.village,
           },
-        },
-      }),
-    ]);
+          farmer: {
+            userId: farmerUser.userId,
+            fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
+            mobile: farmerUser.mobile,
+            address: field.farmer.address,
+          },
+          payment: m.payment
+            ? {
+                paymentId: m.payment.paymentId,
+                totalAmount: Number(m.payment.totalAmount),
+                pilotEarnings: Number(m.payment.pilotEarnings),
+                paymentStatus: m.payment.paymentStatus,
+                paymentMethod: m.payment.paymentMethod,
+                payoutStatus: m.payment.payoutStatus,
+              }
+            : null,
+          review: m.review
+            ? {
+                reviewId: m.review.reviewId,
+                rating: m.review.rating,
+                comment: m.review.comment,
+                createdAt: m.review.createdAt,
+              }
+            : null,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+        };
+      });
 
-    const items: PilotMissionItemDTO[] = missions.map((m) => {
-      const sr = m.serviceRequest;
-      const field = sr.field;
-      const farmerUser = field.farmer.user;
+      const pagination = buildPaginationMeta(total, page, limit);
 
-      return {
-        missionId: m.missionId,
-        requestId: sr.requestId,
-        requestCode: sr.requestCode,
-        serviceType: sr.serviceType,
-        preferredDate: sr.preferredDate,
-        priority: sr.priority,
-        status: m.status,
-        startedAt: m.startedAt,
-        completedAt: m.completedAt,
-        areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
-        pilotNotes: m.pilotNotes,
-        field: {
-          id: field.id,
-          fieldName: field.fieldName,
-          cropType: field.cropType,
-          area: Number(field.area),
-          locationCoordinates: field.locationCoordinates,
-          district: field.district,
-          province: field.province,
-          city: field.city,
-          village: field.village,
-        },
-        farmer: {
-          userId: farmerUser.userId,
-          fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
-          mobile: farmerUser.mobile,
-          address: field.farmer.address,
-        },
-        payment: m.payment
-          ? {
-              paymentId: m.payment.paymentId,
-              totalAmount: Number(m.payment.totalAmount),
-              pilotEarnings: Number(m.payment.pilotEarnings),
-              paymentStatus: m.payment.paymentStatus,
-              paymentMethod: m.payment.paymentMethod,
-              payoutStatus: m.payment.payoutStatus,
-            }
-          : null,
-        review: m.review
-          ? {
-              reviewId: m.review.reviewId,
-              rating: m.review.rating,
-              comment: m.review.comment,
-              createdAt: m.review.createdAt,
-            }
-          : null,
-        createdAt: m.createdAt,
-        updatedAt: m.updatedAt,
-      };
+      return { items, pagination };
     });
-
-    const pagination = buildPaginationMeta(total, page, limit);
-
-    return { items, pagination };
   }
 
   /**
@@ -555,6 +579,9 @@ export class PilotService {
       entityId: missionId,
       details: `Mission #${missionId} started for request ${mission.serviceRequest.requestCode}.`,
     });
+
+    await CacheInvalidator.invalidatePilot(pilotId);
+    await CacheInvalidator.invalidateServiceRequest(mission.requestId);
 
     return {
       missionId: result.missionId,
@@ -656,6 +683,9 @@ export class PilotService {
       details: `Mission #${missionId} completed for ${mission.serviceRequest.requestCode} with ${dto.areaSpread} acres spread.`,
     });
 
+    await CacheInvalidator.invalidatePilot(pilotId);
+    await CacheInvalidator.invalidateServiceRequest(mission.requestId);
+
     return {
       missionId: result.updatedMission.missionId,
       status: result.updatedMission.status,
@@ -678,64 +708,68 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.pilot.payouts(pilotId, query);
 
-    const whereClause: any = { pilotId };
-    if (query.status) {
-      whereClause.status = query.status as PayoutStatus;
-    }
+    return CacheService.getOrSet(cacheKey, CACHE_TTL.PILOT.PAYOUTS_SECONDS, async () => {
+      const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    const [total, payouts, payoutGroups] = await Promise.all([
-      prisma.payout.count({ where: whereClause }),
-      prisma.payout.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.payout.groupBy({
-        by: ["status"],
-        where: { pilotId },
-        _sum: { amount: true },
-      }),
-    ]);
+      const whereClause: any = { pilotId };
+      if (query.status) {
+        whereClause.status = query.status as PayoutStatus;
+      }
 
-    let totalSettled = 0;
-    let totalPending = 0;
-    let totalProcessing = 0;
+      const [total, payouts, payoutGroups] = await Promise.all([
+        prisma.payout.count({ where: whereClause }),
+        prisma.payout.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.payout.groupBy({
+          by: ["status"],
+          where: { pilotId },
+          _sum: { amount: true },
+        }),
+      ]);
 
-    for (const g of payoutGroups) {
-      const amt = Number(g._sum.amount || 0);
-      if (g.status === PayoutStatus.SETTLED) totalSettled = amt;
-      if (g.status === PayoutStatus.PENDING) totalPending = amt;
-      if (g.status === PayoutStatus.PROCESSING) totalProcessing = amt;
-    }
+      let totalSettled = 0;
+      let totalPending = 0;
+      let totalProcessing = 0;
 
-    const items = payouts.map((p) => ({
-      payoutId: p.payoutId,
-      pilotId: p.pilotId,
-      periodStart: p.periodStart,
-      periodEnd: p.periodEnd,
-      amount: Number(p.amount),
-      bankName: p.bankName,
-      bankAccountNo: p.bankAccountNo,
-      transactionRef: p.transactionRef,
-      status: p.status,
-      settledAt: p.settledAt,
-      createdAt: p.createdAt,
-    }));
+      for (const g of payoutGroups) {
+        const amt = Number(g._sum.amount || 0);
+        if (g.status === PayoutStatus.SETTLED) totalSettled = amt;
+        if (g.status === PayoutStatus.PENDING) totalPending = amt;
+        if (g.status === PayoutStatus.PROCESSING) totalProcessing = amt;
+      }
 
-    const pagination = buildPaginationMeta(total, page, limit);
+      const items = payouts.map((p) => ({
+        payoutId: p.payoutId,
+        pilotId: p.pilotId,
+        periodStart: p.periodStart,
+        periodEnd: p.periodEnd,
+        amount: Number(p.amount),
+        bankName: p.bankName,
+        bankAccountNo: p.bankAccountNo,
+        transactionRef: p.transactionRef,
+        status: p.status,
+        settledAt: p.settledAt,
+        createdAt: p.createdAt,
+      }));
 
-    return {
-      payouts: items,
-      summary: {
-        totalSettled: Number(totalSettled.toFixed(2)),
-        totalPending: Number(totalPending.toFixed(2)),
-        totalProcessing: Number(totalProcessing.toFixed(2)),
-      },
-      pagination,
-    };
+      const pagination = buildPaginationMeta(total, page, limit);
+
+      return {
+        payouts: items,
+        summary: {
+          totalSettled: Number(totalSettled.toFixed(2)),
+          totalPending: Number(totalPending.toFixed(2)),
+          totalProcessing: Number(totalProcessing.toFixed(2)),
+        },
+        pagination,
+      };
+    });
   }
 
   /**
@@ -751,66 +785,70 @@ export class PilotService {
     }
     await this.validatePilotExists(pilotId);
 
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.pilot.reviews(pilotId, query);
 
-    const whereClause: any = { pilotId };
-    if (query.minRating !== undefined || query.maxRating !== undefined) {
-      whereClause.rating = {};
-      if (query.minRating !== undefined) whereClause.rating.gte = query.minRating;
-      if (query.maxRating !== undefined) whereClause.rating.lte = query.maxRating;
-    }
+    return CacheService.getOrSet(cacheKey, CACHE_TTL.PILOT.REVIEWS_SECONDS, async () => {
+      const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    const [total, reviews] = await Promise.all([
-      prisma.review.count({ where: whereClause }),
-      prisma.review.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          farmer: {
-            include: {
-              user: {
-                select: {
-                  userId: true,
-                  firstName: true,
-                  lastName: true,
+      const whereClause: any = { pilotId };
+      if (query.minRating !== undefined || query.maxRating !== undefined) {
+        whereClause.rating = {};
+        if (query.minRating !== undefined) whereClause.rating.gte = query.minRating;
+        if (query.maxRating !== undefined) whereClause.rating.lte = query.maxRating;
+      }
+
+      const [total, reviews] = await Promise.all([
+        prisma.review.count({ where: whereClause }),
+        prisma.review.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+          include: {
+            farmer: {
+              include: {
+                user: {
+                  select: {
+                    userId: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+              },
+            },
+            mission: {
+              include: {
+                serviceRequest: {
+                  select: {
+                    requestCode: true,
+                  },
                 },
               },
             },
           },
-          mission: {
-            include: {
-              serviceRequest: {
-                select: {
-                  requestCode: true,
-                },
-              },
-            },
-          },
+        }),
+      ]);
+
+      const items: PilotReviewItemDTO[] = reviews.map((r) => ({
+        reviewId: r.reviewId,
+        missionId: r.missionId,
+        rating: r.rating,
+        comment: r.comment,
+        createdAt: r.createdAt,
+        farmer: {
+          userId: r.farmer.user.userId,
+          fullName: `${r.farmer.user.firstName} ${r.farmer.user.lastName}`.trim(),
         },
-      }),
-    ]);
+        mission: {
+          requestCode: r.mission.serviceRequest.requestCode,
+          completedAt: r.mission.completedAt,
+        },
+      }));
 
-    const items: PilotReviewItemDTO[] = reviews.map((r) => ({
-      reviewId: r.reviewId,
-      missionId: r.missionId,
-      rating: r.rating,
-      comment: r.comment,
-      createdAt: r.createdAt,
-      farmer: {
-        userId: r.farmer.user.userId,
-        fullName: `${r.farmer.user.firstName} ${r.farmer.user.lastName}`.trim(),
-      },
-      mission: {
-        requestCode: r.mission.serviceRequest.requestCode,
-        completedAt: r.mission.completedAt,
-      },
-    }));
+      const pagination = buildPaginationMeta(total, page, limit);
 
-    const pagination = buildPaginationMeta(total, page, limit);
-
-    return { items, pagination };
+      return { items, pagination };
+    });
   }
 
   /**
@@ -895,6 +933,11 @@ export class PilotService {
         details: `Pilot ${requestUser.email} ACCEPTED mission #${missionId} for request ${mission.serviceRequest.requestCode}.`,
       });
 
+      if (mission.pilotId) {
+        await CacheInvalidator.invalidatePilot(mission.pilotId);
+      }
+      await CacheInvalidator.invalidateServiceRequest(mission.requestId);
+
       return {
         missionId,
         requestId: mission.requestId,
@@ -934,6 +977,11 @@ export class PilotService {
         entityId: missionId,
         details: `Pilot ${requestUser.email} REJECTED mission #${missionId} for request ${mission.serviceRequest.requestCode}. Reason: ${dto.rejectionReason || "None provided"}. Request status reset to PENDING.`,
       });
+
+      if (mission.pilotId) {
+        await CacheInvalidator.invalidatePilot(mission.pilotId);
+      }
+      await CacheInvalidator.invalidateServiceRequest(mission.requestId);
 
       return {
         missionId,
@@ -1047,6 +1095,8 @@ export class PilotService {
       entityId: pilotId,
       details: `Pilot #${pilotId} (${pilot.email}) and associated credentials/profiles were deleted.`,
     });
+
+    await CacheInvalidator.invalidatePilot(pilotId);
 
     return {
       userId: pilot.userId,

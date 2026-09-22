@@ -10,6 +10,12 @@ import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import { RequestStatus, MissionStatus } from "../generated/prisma/enums";
+import {
+  CacheService,
+  CacheKeyBuilder,
+  CACHE_TTL,
+  CacheInvalidator,
+} from "../utils/cache";
 
 export class FieldService {
   /**
@@ -83,102 +89,112 @@ export class FieldService {
       throw AppError.unauthorized("Authentication required.");
     }
 
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
-    const {
-      search,
-      cropType,
-      district,
-      province,
-      farmerId,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = query;
+    const isFarmer = requestUser.role.toLowerCase() === "farmer";
+    const cacheScope = isFarmer ? requestUser.userId : undefined;
+    const cacheKey = CacheKeyBuilder.field.list(query, cacheScope);
 
-    const whereClause: any = {};
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FIELD.LIST_SECONDS,
+      async () => {
+        const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+        const {
+          search,
+          cropType,
+          district,
+          province,
+          farmerId,
+          sortBy = "createdAt",
+          sortOrder = "desc",
+        } = query;
 
-    // RBAC & IDOR: Farmers strictly limited to their own fields
-    const userRole = requestUser.role.toLowerCase();
-    if (userRole === "farmer") {
-      whereClause.farmerId = requestUser.userId;
-    } else if (farmerId) {
-      whereClause.farmerId = farmerId;
-    }
+        const whereClause: any = {};
 
-    if (cropType && cropType.trim()) {
-      whereClause.cropType = { contains: cropType.trim(), mode: "insensitive" };
-    }
+        // RBAC & IDOR: Farmers strictly limited to their own fields
+        const userRole = requestUser.role.toLowerCase();
+        if (userRole === "farmer") {
+          whereClause.farmerId = requestUser.userId;
+        } else if (farmerId) {
+          whereClause.farmerId = farmerId;
+        }
 
-    if (district && district.trim()) {
-      whereClause.district = { contains: district.trim(), mode: "insensitive" };
-    }
+        if (cropType && cropType.trim()) {
+          whereClause.cropType = { contains: cropType.trim(), mode: "insensitive" };
+        }
 
-    if (province && province.trim()) {
-      whereClause.province = { contains: province.trim(), mode: "insensitive" };
-    }
+        if (district && district.trim()) {
+          whereClause.district = { contains: district.trim(), mode: "insensitive" };
+        }
 
-    if (search && search.trim()) {
-      const term = search.trim();
-      whereClause.OR = [
-        { fieldName: { contains: term, mode: "insensitive" } },
-        { city: { contains: term, mode: "insensitive" } },
-        { village: { contains: term, mode: "insensitive" } },
-        { cropType: { contains: term, mode: "insensitive" } },
-        {
-          farmer: {
-            user: {
-              OR: [
-                { firstName: { contains: term, mode: "insensitive" } },
-                { lastName: { contains: term, mode: "insensitive" } },
-                { email: { contains: term, mode: "insensitive" } },
-                { mobile: { contains: term, mode: "insensitive" } },
-              ],
-            },
-          },
-        },
-      ];
-    }
+        if (province && province.trim()) {
+          whereClause.province = { contains: province.trim(), mode: "insensitive" };
+        }
 
-    const orderBy: any = {};
-    if (sortBy === "fieldName") orderBy.fieldName = sortOrder;
-    else if (sortBy === "area") orderBy.area = sortOrder;
-    else if (sortBy === "cropType") orderBy.cropType = sortOrder;
-    else orderBy.createdAt = sortOrder;
-
-    const [total, fields] = await Promise.all([
-      prisma.field.count({ where: whereClause }),
-      prisma.field.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          farmer: {
-            include: {
-              user: {
-                select: {
-                  userId: true,
-                  firstName: true,
-                  lastName: true,
-                  email: true,
-                  mobile: true,
+        if (search && search.trim()) {
+          const term = search.trim();
+          whereClause.OR = [
+            { fieldName: { contains: term, mode: "insensitive" } },
+            { city: { contains: term, mode: "insensitive" } },
+            { village: { contains: term, mode: "insensitive" } },
+            { cropType: { contains: term, mode: "insensitive" } },
+            {
+              farmer: {
+                user: {
+                  OR: [
+                    { firstName: { contains: term, mode: "insensitive" } },
+                    { lastName: { contains: term, mode: "insensitive" } },
+                    { email: { contains: term, mode: "insensitive" } },
+                    { mobile: { contains: term, mode: "insensitive" } },
+                  ],
                 },
               },
             },
-          },
-          serviceRequests: {
-            select: { status: true },
-          },
-          _count: {
-            select: { serviceRequests: true },
-          },
-        },
-      }),
-    ]);
+          ];
+        }
 
-    const items = fields.map((f) => this.mapFieldDetail(f));
-    const pagination = buildPaginationMeta(total, page, limit);
+        const orderBy: any = {};
+        if (sortBy === "fieldName") orderBy.fieldName = sortOrder;
+        else if (sortBy === "area") orderBy.area = sortOrder;
+        else if (sortBy === "cropType") orderBy.cropType = sortOrder;
+        else orderBy.createdAt = sortOrder;
 
-    return { fields: items, pagination };
+        const [total, fields] = await Promise.all([
+          prisma.field.count({ where: whereClause }),
+          prisma.field.findMany({
+            where: whereClause,
+            skip,
+            take: limit,
+            orderBy,
+            include: {
+              farmer: {
+                include: {
+                  user: {
+                    select: {
+                      userId: true,
+                      firstName: true,
+                      lastName: true,
+                      email: true,
+                      mobile: true,
+                    },
+                  },
+                },
+              },
+              serviceRequests: {
+                select: { status: true },
+              },
+              _count: {
+                select: { serviceRequests: true },
+              },
+            },
+          }),
+        ]);
+
+        const items = fields.map((f) => this.mapFieldDetail(f));
+        const pagination = buildPaginationMeta(total, page, limit);
+
+        return { fields: items, pagination };
+      }
+    );
   }
 
   /**
@@ -193,34 +209,44 @@ export class FieldService {
       throw AppError.unauthorized("Authentication required.");
     }
 
-    const field = await prisma.field.findUnique({
-      where: { id: fieldId },
-      include: {
-        farmer: {
+    const cacheKey = CacheKeyBuilder.field.detail(fieldId);
+
+    const field = await CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FIELD.DETAIL_SECONDS,
+      async () => {
+        const found = await prisma.field.findUnique({
+          where: { id: fieldId },
           include: {
-            user: {
-              select: {
-                userId: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                mobile: true,
+            farmer: {
+              include: {
+                user: {
+                  select: {
+                    userId: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    mobile: true,
+                  },
+                },
               },
             },
+            serviceRequests: {
+              select: { status: true },
+            },
+            _count: {
+              select: { serviceRequests: true },
+            },
           },
-        },
-        serviceRequests: {
-          select: { status: true },
-        },
-        _count: {
-          select: { serviceRequests: true },
-        },
-      },
-    });
+        });
 
-    if (!field) {
-      throw AppError.notFound(`Field with ID ${fieldId} not found.`);
-    }
+        if (!found) {
+          throw AppError.notFound(`Field with ID ${fieldId} not found.`);
+        }
+
+        return this.mapFieldDetail(found);
+      }
+    );
 
     // RBAC: Check ownership if caller is Farmer
     if (
@@ -230,7 +256,7 @@ export class FieldService {
       throw AppError.forbidden("Access denied. You do not own this field.");
     }
 
-    return this.mapFieldDetail(field);
+    return field;
   }
 
   /**
@@ -335,7 +361,17 @@ export class FieldService {
       },
     });
 
-    return this.mapFieldDetail(newField);
+    const created = this.mapFieldDetail(newField);
+
+    // Invalidate caches
+    Promise.allSettled([
+      CacheInvalidator.invalidateField(created.id, created.farmerId),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[FieldService] Cache invalidation warning:", err.message);
+    });
+
+    return created;
   }
 
   /**
@@ -412,7 +448,17 @@ export class FieldService {
       },
     });
 
-    return this.mapFieldDetail(updatedField);
+    const updated = this.mapFieldDetail(updatedField);
+
+    // Invalidate caches
+    Promise.allSettled([
+      CacheInvalidator.invalidateField(updated.id, updated.farmerId),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[FieldService] Cache invalidation warning:", err.message);
+    });
+
+    return updated;
   }
 
   /**
@@ -476,6 +522,14 @@ export class FieldService {
 
     await prisma.field.delete({
       where: { id: fieldId },
+    });
+
+    // Invalidate caches
+    Promise.allSettled([
+      CacheInvalidator.invalidateField(field.id, field.farmerId),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[FieldService] Cache invalidation warning:", err.message);
     });
 
     return {

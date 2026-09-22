@@ -1,10 +1,5 @@
 import { Request, Response } from "express";
 import { AdminAnalyticsService } from "../services/admin-analytics.service";
-import {
-  AdminAnalyticsCacheService,
-  ADMIN_ANALYTICS_CACHE_TTL,
-} from "../services/admin-analytics-cache.service";
-import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendSuccess, sendPaginated } from "../utils/response";
 
@@ -15,15 +10,7 @@ export class AdminAnalyticsController {
    */
   public static getAnalyticsSummary = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
-      const cacheKey = AdminAnalyticsCacheService.buildSummaryCacheKey();
-
-      const { data } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: ADMIN_ANALYTICS_CACHE_TTL.SUMMARY_SECONDS,
-        fetchFn: () => AdminAnalyticsService.getAnalyticsSummary(),
-        res,
-      });
-
+      const data = await AdminAnalyticsService.getAnalyticsSummary();
       sendSuccess(res, data);
     }
   );
@@ -34,15 +21,7 @@ export class AdminAnalyticsController {
    */
   public static getCompletedMissionsAnalytics = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
-      const cacheKey = AdminAnalyticsCacheService.buildCompletedMissionsCacheKey();
-
-      const { data } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: ADMIN_ANALYTICS_CACHE_TTL.METRICS_SECONDS,
-        fetchFn: () => AdminAnalyticsService.getCompletedMissionsAnalytics(),
-        res,
-      });
-
+      const data = await AdminAnalyticsService.getCompletedMissionsAnalytics();
       sendSuccess(res, data);
     }
   );
@@ -53,15 +32,7 @@ export class AdminAnalyticsController {
    */
   public static getRevenueAnalytics = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
-      const cacheKey = AdminAnalyticsCacheService.buildRevenueCacheKey();
-
-      const { data } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: ADMIN_ANALYTICS_CACHE_TTL.METRICS_SECONDS,
-        fetchFn: () => AdminAnalyticsService.getRevenueAnalytics(),
-        res,
-      });
-
+      const data = await AdminAnalyticsService.getRevenueAnalytics();
       sendSuccess(res, data);
     }
   );
@@ -72,15 +43,7 @@ export class AdminAnalyticsController {
    */
   public static getPilotFleetPerformance = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
-      const cacheKey = AdminAnalyticsCacheService.buildPilotPerformanceCacheKey();
-
-      const { data } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: ADMIN_ANALYTICS_CACHE_TTL.METRICS_SECONDS,
-        fetchFn: () => AdminAnalyticsService.getPilotFleetPerformance(),
-        res,
-      });
-
+      const data = await AdminAnalyticsService.getPilotFleetPerformance();
       sendSuccess(res, data);
     }
   );
@@ -91,15 +54,7 @@ export class AdminAnalyticsController {
    */
   public static getFarmerGrowth = asyncHandler(
     async (_req: Request, res: Response): Promise<void> => {
-      const cacheKey = AdminAnalyticsCacheService.buildFarmerGrowthCacheKey();
-
-      const { data } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: ADMIN_ANALYTICS_CACHE_TTL.METRICS_SECONDS,
-        fetchFn: () => AdminAnalyticsService.getFarmerGrowth(),
-        res,
-      });
-
+      const data = await AdminAnalyticsService.getFarmerGrowth();
       sendSuccess(res, data);
     }
   );
@@ -110,21 +65,12 @@ export class AdminAnalyticsController {
    */
   public static getPilotPerformanceTable = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const cacheKey =
-        AdminAnalyticsCacheService.buildPilotPerformanceTableCacheKey(
-          req.query as any
-        );
-
-      const { data: result } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: ADMIN_ANALYTICS_CACHE_TTL.TABLE_SECONDS,
-        fetchFn: () =>
-          AdminAnalyticsService.getPilotPerformanceTable(req.query as any),
-        res,
-      });
-
+      const result = await AdminAnalyticsService.getPilotPerformanceTable(
+        req.query as any
+      );
       sendPaginated(res, "pilots", result.pilots, result.pagination);
     }
   );
 }
+
 

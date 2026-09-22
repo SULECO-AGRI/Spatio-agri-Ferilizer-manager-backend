@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { PaginationMeta } from "../types/farmer.types";
+import { PaginationMeta } from "../types/common.types";
 
 /**
  * Standard Success Response Envelope

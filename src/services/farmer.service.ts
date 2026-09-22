@@ -17,6 +17,12 @@ import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import { RequestStatus, MissionStatus } from "../generated/prisma/enums";
+import {
+  CacheService,
+  CacheKeyBuilder,
+  CACHE_TTL,
+  CacheInvalidator,
+} from "../utils/cache";
 
 export class FarmerService {
   /**
@@ -74,114 +80,122 @@ export class FarmerService {
   public static async getAllFarmers(
     query: FarmerQueryDTO
   ): Promise<PaginatedResult<FarmerListItemDTO>> {
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.farmer.list(query);
 
-    const { search, sortBy = "createdAt", sortOrder = "desc" } = query;
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FARMER.LIST_SECONDS,
+      async () => {
+        const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    // Secure search filters with SQL/NoSQL injection defense
-    const whereClause: any = {
-      role: {
-        name: "Farmer",
-      },
-    };
+        const { search, sortBy = "createdAt", sortOrder = "desc" } = query;
 
-    if (search && search.trim() !== "") {
-      const searchTerm = search.trim();
-      whereClause.OR = [
-        { firstName: { contains: searchTerm, mode: "insensitive" } },
-        { lastName: { contains: searchTerm, mode: "insensitive" } },
-        { email: { contains: searchTerm, mode: "insensitive" } },
-        { mobile: { contains: searchTerm, mode: "insensitive" } },
-        {
-          farmerProfile: {
-            OR: [
-              { nic: { contains: searchTerm, mode: "insensitive" } },
-              { address: { contains: searchTerm, mode: "insensitive" } },
-            ],
+        // Secure search filters with SQL/NoSQL injection defense
+        const whereClause: any = {
+          role: {
+            name: "Farmer",
           },
-        },
-      ];
-    }
+        };
 
-    // Whitelisted dynamic sorting
-    let orderBy: any = { createdAt: sortOrder };
-    if (sortBy === "name") {
-      orderBy = { firstName: sortOrder };
-    } else if (sortBy === "email") {
-      orderBy = { email: sortOrder };
-    } else if (sortBy === "memberSince") {
-      orderBy = { farmerProfile: { memberSince: sortOrder } };
-    }
+        if (search && search.trim() !== "") {
+          const searchTerm = search.trim();
+          whereClause.OR = [
+            { firstName: { contains: searchTerm, mode: "insensitive" } },
+            { lastName: { contains: searchTerm, mode: "insensitive" } },
+            { email: { contains: searchTerm, mode: "insensitive" } },
+            { mobile: { contains: searchTerm, mode: "insensitive" } },
+            {
+              farmerProfile: {
+                OR: [
+                  { nic: { contains: searchTerm, mode: "insensitive" } },
+                  { address: { contains: searchTerm, mode: "insensitive" } },
+                ],
+              },
+            },
+          ];
+        }
 
-    // Parallel fetch ensuring zero sensitive data (like password) is exposed
-    const [total, farmers] = await Promise.all([
-      prisma.user.count({ where: whereClause }),
-      prisma.user.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy,
-        select: {
-          userId: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          mobile: true,
-          createdAt: true,
-          updatedAt: true,
-          farmerProfile: {
+        // Whitelisted dynamic sorting
+        let orderBy: any = { createdAt: sortOrder };
+        if (sortBy === "name") {
+          orderBy = { firstName: sortOrder };
+        } else if (sortBy === "email") {
+          orderBy = { email: sortOrder };
+        } else if (sortBy === "memberSince") {
+          orderBy = { farmerProfile: { memberSince: sortOrder } };
+        }
+
+        // Parallel fetch ensuring zero sensitive data (like password) is exposed
+        const [total, farmers] = await Promise.all([
+          prisma.user.count({ where: whereClause }),
+          prisma.user.findMany({
+            where: whereClause,
+            skip,
+            take: limit,
+            orderBy,
             select: {
-              nic: true,
-              address: true,
-              memberSince: true,
-              fields: {
+              userId: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              mobile: true,
+              createdAt: true,
+              updatedAt: true,
+              farmerProfile: {
                 select: {
-                  area: true,
-                  _count: {
-                    select: { serviceRequests: true },
+                  nic: true,
+                  address: true,
+                  memberSince: true,
+                  fields: {
+                    select: {
+                      area: true,
+                      _count: {
+                        select: { serviceRequests: true },
+                      },
+                    },
                   },
                 },
               },
             },
-          },
-        },
-      }),
-    ]);
+          }),
+        ]);
 
-    const items: FarmerListItemDTO[] = farmers.map((farmer) => {
-      const profile = farmer.farmerProfile;
-      const fields = profile?.fields || [];
-      const totalFields = fields.length;
-      const totalArea = fields.reduce(
-        (sum, f) => sum + (f.area ? Number(f.area) : 0),
-        0
-      );
-      const totalServiceRequests = fields.reduce(
-        (sum, f) => sum + (f._count?.serviceRequests || 0),
-        0
-      );
+        const items: FarmerListItemDTO[] = farmers.map((farmer) => {
+          const profile = farmer.farmerProfile;
+          const fields = profile?.fields || [];
+          const totalFields = fields.length;
+          const totalArea = fields.reduce(
+            (sum, f) => sum + (f.area ? Number(f.area) : 0),
+            0
+          );
+          const totalServiceRequests = fields.reduce(
+            (sum, f) => sum + (f._count?.serviceRequests || 0),
+            0
+          );
 
-      return {
-        userId: farmer.userId,
-        email: farmer.email,
-        fullName: `${farmer.firstName} ${farmer.lastName}`.trim(),
-        firstName: farmer.firstName,
-        lastName: farmer.lastName,
-        mobile: farmer.mobile,
-        nic: profile?.nic || null,
-        address: profile?.address || null,
-        memberSince: profile?.memberSince || farmer.createdAt,
-        totalFields,
-        totalArea: Number(totalArea.toFixed(2)),
-        totalServiceRequests,
-        createdAt: farmer.createdAt,
-        updatedAt: farmer.updatedAt,
-      };
-    });
+          return {
+            userId: farmer.userId,
+            email: farmer.email,
+            fullName: `${farmer.firstName} ${farmer.lastName}`.trim(),
+            firstName: farmer.firstName,
+            lastName: farmer.lastName,
+            mobile: farmer.mobile,
+            nic: profile?.nic || null,
+            address: profile?.address || null,
+            memberSince: profile?.memberSince || farmer.createdAt,
+            totalFields,
+            totalArea: Number(totalArea.toFixed(2)),
+            totalServiceRequests,
+            createdAt: farmer.createdAt,
+            updatedAt: farmer.updatedAt,
+          };
+        });
 
-    const pagination = buildPaginationMeta(total, page, limit);
+        const pagination = buildPaginationMeta(total, page, limit);
 
-    return { items, pagination };
+        return { items, pagination };
+      }
+    );
   }
 
   /**
@@ -196,117 +210,125 @@ export class FarmerService {
     }
     await this.validateFarmerExists(farmerId);
 
-    const user = await prisma.user.findUnique({
-      where: { userId: farmerId },
-      select: {
-        userId: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        mobile: true,
-        createdAt: true,
-        updatedAt: true,
-        role: {
-          select: { name: true },
-        },
-        farmerProfile: {
+    const cacheKey = CacheKeyBuilder.farmer.detail(farmerId);
+
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FARMER.DETAIL_SECONDS,
+      async () => {
+        const user = await prisma.user.findUnique({
+          where: { userId: farmerId },
           select: {
-            nic: true,
-            address: true,
-            memberSince: true,
-            fields: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            mobile: true,
+            createdAt: true,
+            updatedAt: true,
+            role: {
+              select: { name: true },
+            },
+            farmerProfile: {
               select: {
-                area: true,
-                serviceRequests: {
+                nic: true,
+                address: true,
+                memberSince: true,
+                fields: {
                   select: {
-                    requestId: true,
-                    status: true,
-                    missions: {
+                    area: true,
+                    serviceRequests: {
                       select: {
-                        payment: {
+                        requestId: true,
+                        status: true,
+                        missions: {
                           select: {
-                            totalAmount: true,
-                            paymentStatus: true,
+                            payment: {
+                              select: {
+                                totalAmount: true,
+                                paymentStatus: true,
+                              },
+                            },
                           },
                         },
                       },
                     },
                   },
                 },
+                reviews: {
+                  select: { rating: true },
+                },
               },
             },
-            reviews: {
-              select: { rating: true },
-            },
           },
-        },
-      },
-    });
+        });
 
-    if (!user || !user.farmerProfile) {
-      throw AppError.notFound(`Farmer profile for ID ${farmerId} not found.`);
-    }
+        if (!user || !user.farmerProfile) {
+          throw AppError.notFound(`Farmer profile for ID ${farmerId} not found.`);
+        }
 
-    const fields = user.farmerProfile.fields || [];
-    const reviews = user.farmerProfile.reviews || [];
+        const fields = user.farmerProfile.fields || [];
+        const reviews = user.farmerProfile.reviews || [];
 
-    const totalFields = fields.length;
-    const totalAreaAcres = fields.reduce(
-      (sum, f) => sum + (f.area ? Number(f.area) : 0),
-      0
-    );
+        const totalFields = fields.length;
+        const totalAreaAcres = fields.reduce(
+          (sum, f) => sum + (f.area ? Number(f.area) : 0),
+          0
+        );
 
-    let totalServiceRequests = 0;
-    let completedRequests = 0;
-    let pendingRequests = 0;
-    let totalSpent = 0;
+        let totalServiceRequests = 0;
+        let completedRequests = 0;
+        let pendingRequests = 0;
+        let totalSpent = 0;
 
-    for (const field of fields) {
-      for (const req of field.serviceRequests) {
-        totalServiceRequests++;
-        if (req.status === "COMPLETED") completedRequests++;
-        if (req.status === "PENDING") pendingRequests++;
+        for (const field of fields) {
+          for (const req of field.serviceRequests) {
+            totalServiceRequests++;
+            if (req.status === "COMPLETED") completedRequests++;
+            if (req.status === "PENDING") pendingRequests++;
 
-        for (const m of req.missions) {
-          if (m.payment && m.payment.paymentStatus === "COMPLETED") {
-            totalSpent += Number(m.payment.totalAmount || 0);
+            for (const m of req.missions) {
+              if (m.payment && m.payment.paymentStatus === "COMPLETED") {
+                totalSpent += Number(m.payment.totalAmount || 0);
+              }
+            }
           }
         }
+
+        const averageRatingGiven =
+          reviews.length > 0
+            ? Number(
+                (
+                  reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+                ).toFixed(1)
+              )
+            : null;
+
+        return {
+          userId: user.userId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          fullName: `${user.firstName} ${user.lastName}`.trim(),
+          mobile: user.mobile,
+          nic: user.farmerProfile.nic,
+          address: user.farmerProfile.address,
+          memberSince: user.farmerProfile.memberSince,
+          role: user.role.name,
+          stats: {
+            totalFields,
+            totalAreaAcres: Number(totalAreaAcres.toFixed(2)),
+            totalServiceRequests,
+            completedRequests,
+            pendingRequests,
+            totalSpent: Number(totalSpent.toFixed(2)),
+            averageRatingGiven,
+          },
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        };
       }
-    }
-
-    const averageRatingGiven =
-      reviews.length > 0
-        ? Number(
-            (
-              reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-            ).toFixed(1)
-          )
-        : null;
-
-    return {
-      userId: user.userId,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      fullName: `${user.firstName} ${user.lastName}`.trim(),
-      mobile: user.mobile,
-      nic: user.farmerProfile.nic,
-      address: user.farmerProfile.address,
-      memberSince: user.farmerProfile.memberSince,
-      role: user.role.name,
-      stats: {
-        totalFields,
-        totalAreaAcres: Number(totalAreaAcres.toFixed(2)),
-        totalServiceRequests,
-        completedRequests,
-        pendingRequests,
-        totalSpent: Number(totalSpent.toFixed(2)),
-        averageRatingGiven,
-      },
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+    );
   }
 
   /**
@@ -322,45 +344,53 @@ export class FarmerService {
     }
     await this.validateFarmerExists(farmerId);
 
-    const whereClause: any = {
-      farmerId,
-    };
+    const cacheKey = CacheKeyBuilder.farmer.fields(farmerId, query);
 
-    if (query.cropType) {
-      whereClause.cropType = { contains: query.cropType, mode: "insensitive" };
-    }
-    if (query.district) {
-      whereClause.district = { contains: query.district, mode: "insensitive" };
-    }
-    if (query.province) {
-      whereClause.province = { contains: query.province, mode: "insensitive" };
-    }
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FARMER.FIELDS_SECONDS,
+      async () => {
+        const whereClause: any = {
+          farmerId,
+        };
 
-    const fields = await prisma.field.findMany({
-      where: whereClause,
-      include: {
-        _count: {
-          select: { serviceRequests: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        if (query.cropType) {
+          whereClause.cropType = { contains: query.cropType, mode: "insensitive" };
+        }
+        if (query.district) {
+          whereClause.district = { contains: query.district, mode: "insensitive" };
+        }
+        if (query.province) {
+          whereClause.province = { contains: query.province, mode: "insensitive" };
+        }
 
-    return fields.map((f) => ({
-      id: f.id,
-      farmerId: f.farmerId,
-      fieldName: f.fieldName,
-      cropType: f.cropType,
-      locationCoordinates: f.locationCoordinates,
-      area: Number(f.area),
-      province: f.province,
-      district: f.district,
-      city: f.city,
-      village: f.village,
-      totalRequests: f._count.serviceRequests,
-      createdAt: f.createdAt,
-      updatedAt: f.updatedAt,
-    }));
+        const fields = await prisma.field.findMany({
+          where: whereClause,
+          include: {
+            _count: {
+              select: { serviceRequests: true },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        return fields.map((f) => ({
+          id: f.id,
+          farmerId: f.farmerId,
+          fieldName: f.fieldName,
+          cropType: f.cropType,
+          locationCoordinates: f.locationCoordinates,
+          area: Number(f.area),
+          province: f.province,
+          district: f.district,
+          city: f.city,
+          village: f.village,
+          totalRequests: f._count.serviceRequests,
+          createdAt: f.createdAt,
+          updatedAt: f.updatedAt,
+        }));
+      }
+    );
   }
 
   /**
@@ -396,6 +426,14 @@ export class FarmerService {
       },
     });
 
+    // Invalidate caches
+    Promise.allSettled([
+      CacheInvalidator.invalidateFarmer(farmerId),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[FarmerService] Cache invalidation warning:", err.message);
+    });
+
     return {
       id: newField.id,
       farmerId: newField.farmerId,
@@ -426,130 +464,138 @@ export class FarmerService {
     }
     await this.validateFarmerExists(farmerId);
 
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.farmer.services(farmerId, query);
 
-    const whereClause: any = {
-      field: {
-        farmerId,
-      },
-    };
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FARMER.SERVICES_SECONDS,
+      async () => {
+        const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    if (query.status) {
-      whereClause.status = query.status;
-    }
-    if (query.priority) {
-      whereClause.priority = query.priority;
-    }
-    if (query.serviceType) {
-      whereClause.serviceType = query.serviceType;
-    }
-    if (query.fieldId) {
-      whereClause.fieldId = Number(query.fieldId);
-    }
+        const whereClause: any = {
+          field: {
+            farmerId,
+          },
+        };
 
-    const [total, requests] = await Promise.all([
-      prisma.serviceRequest.count({ where: whereClause }),
-      prisma.serviceRequest.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          field: true,
-          missions: {
+        if (query.status) {
+          whereClause.status = query.status;
+        }
+        if (query.priority) {
+          whereClause.priority = query.priority;
+        }
+        if (query.serviceType) {
+          whereClause.serviceType = query.serviceType;
+        }
+        if (query.fieldId) {
+          whereClause.fieldId = Number(query.fieldId);
+        }
+
+        const [total, requests] = await Promise.all([
+          prisma.serviceRequest.count({ where: whereClause }),
+          prisma.serviceRequest.findMany({
+            where: whereClause,
+            skip,
+            take: limit,
+            orderBy: { createdAt: "desc" },
             include: {
-              pilot: {
+              field: true,
+              missions: {
                 include: {
-                  user: {
+                  pilot: {
+                    include: {
+                      user: {
+                        select: {
+                          userId: true,
+                          firstName: true,
+                          lastName: true,
+                          mobile: true,
+                        },
+                      },
+                    },
+                  },
+                  payment: {
                     select: {
-                      userId: true,
-                      firstName: true,
-                      lastName: true,
-                      mobile: true,
+                      paymentId: true,
+                      totalAmount: true,
+                      paymentStatus: true,
+                      paymentMethod: true,
+                      paidAt: true,
+                    },
+                  },
+                  review: {
+                    select: {
+                      reviewId: true,
+                      rating: true,
+                      comment: true,
+                      createdAt: true,
                     },
                   },
                 },
               },
-              payment: {
-                select: {
-                  paymentId: true,
-                  totalAmount: true,
-                  paymentStatus: true,
-                  paymentMethod: true,
-                  paidAt: true,
-                },
-              },
-              review: {
-                select: {
-                  reviewId: true,
-                  rating: true,
-                  comment: true,
-                  createdAt: true,
-                },
-              },
             },
+          }),
+        ]);
+
+        const items: FarmerServiceRequestDTO[] = requests.map((req) => ({
+          requestId: req.requestId,
+          requestCode: req.requestCode,
+          fieldId: req.fieldId,
+          fieldName: req.field.fieldName,
+          cropType: req.field.cropType,
+          fieldLocation: {
+            district: req.field.district,
+            province: req.field.province,
+            city: req.field.city,
+            village: req.field.village,
           },
-        },
-      }),
-    ]);
+          serviceType: req.serviceType,
+          preferredDate: req.preferredDate,
+          priority: req.priority,
+          status: req.status,
+          estimatedCost: Number(req.estimatedCost),
+          createdAt: req.createdAt,
+          updatedAt: req.updatedAt,
+          missions: req.missions.map((m) => ({
+            missionId: m.missionId,
+            status: m.status,
+            startedAt: m.startedAt,
+            completedAt: m.completedAt,
+            areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
+            pilotNotes: m.pilotNotes,
+            pilot: m.pilot
+              ? {
+                  userId: m.pilot.userId,
+                  name: `${m.pilot.user.firstName} ${m.pilot.user.lastName}`.trim(),
+                  mobile: m.pilot.user.mobile,
+                  licenceNumber: m.pilot.licenceNumber,
+                }
+              : null,
+            payment: m.payment
+              ? {
+                  paymentId: m.payment.paymentId,
+                  totalAmount: Number(m.payment.totalAmount),
+                  paymentStatus: m.payment.paymentStatus,
+                  paymentMethod: m.payment.paymentMethod,
+                  paidAt: m.payment.paidAt,
+                }
+              : null,
+            review: m.review
+              ? {
+                  reviewId: m.review.reviewId,
+                  rating: m.review.rating,
+                  comment: m.review.comment,
+                  createdAt: m.review.createdAt,
+                }
+              : null,
+          })),
+        }));
 
-    const items: FarmerServiceRequestDTO[] = requests.map((req) => ({
-      requestId: req.requestId,
-      requestCode: req.requestCode,
-      fieldId: req.fieldId,
-      fieldName: req.field.fieldName,
-      cropType: req.field.cropType,
-      fieldLocation: {
-        district: req.field.district,
-        province: req.field.province,
-        city: req.field.city,
-        village: req.field.village,
-      },
-      serviceType: req.serviceType,
-      preferredDate: req.preferredDate,
-      priority: req.priority,
-      status: req.status,
-      estimatedCost: Number(req.estimatedCost),
-      createdAt: req.createdAt,
-      updatedAt: req.updatedAt,
-      missions: req.missions.map((m) => ({
-        missionId: m.missionId,
-        status: m.status,
-        startedAt: m.startedAt,
-        completedAt: m.completedAt,
-        areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
-        pilotNotes: m.pilotNotes,
-        pilot: m.pilot
-          ? {
-              userId: m.pilot.userId,
-              name: `${m.pilot.user.firstName} ${m.pilot.user.lastName}`.trim(),
-              mobile: m.pilot.user.mobile,
-              licenceNumber: m.pilot.licenceNumber,
-            }
-          : null,
-        payment: m.payment
-          ? {
-              paymentId: m.payment.paymentId,
-              totalAmount: Number(m.payment.totalAmount),
-              paymentStatus: m.payment.paymentStatus,
-              paymentMethod: m.payment.paymentMethod,
-              paidAt: m.payment.paidAt,
-            }
-          : null,
-        review: m.review
-          ? {
-              reviewId: m.review.reviewId,
-              rating: m.review.rating,
-              comment: m.review.comment,
-              createdAt: m.review.createdAt,
-            }
-          : null,
-      })),
-    }));
+        const pagination = buildPaginationMeta(total, page, limit);
 
-    const pagination = buildPaginationMeta(total, page, limit);
-
-    return { items, pagination };
+        return { items, pagination };
+      }
+    );
   }
 
   /**
@@ -565,144 +611,152 @@ export class FarmerService {
     }
     await this.validateFarmerExists(farmerId);
 
-    const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
+    const cacheKey = CacheKeyBuilder.farmer.payments(farmerId, query);
 
-    const baseWhere: any = {
-      mission: {
-        serviceRequest: {
-          field: {
-            farmerId,
-          },
-        },
-      },
-    };
+    return CacheService.getOrSet(
+      cacheKey,
+      CACHE_TTL.FARMER.PAYMENTS_SECONDS,
+      async () => {
+        const { page, limit, skip } = getPaginationOffsets(query.page, query.limit);
 
-    const filteredWhere: any = { ...baseWhere };
-
-    if (query.paymentStatus) {
-      filteredWhere.paymentStatus = query.paymentStatus;
-    }
-    if (query.paymentMethod) {
-      filteredWhere.paymentMethod = query.paymentMethod;
-    }
-
-    const [total, payments, paymentStatusGroups, totalTransactions] = await Promise.all([
-      prisma.payment.count({ where: filteredWhere }),
-      prisma.payment.findMany({
-        where: filteredWhere,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        select: {
-          paymentId: true,
-          transactionReference: true,
-          totalAmount: true,
-          paymentMethod: true,
-          paymentStatus: true,
-          paidAt: true,
-          createdAt: true,
+        const baseWhere: any = {
           mission: {
+            serviceRequest: {
+              field: {
+                farmerId,
+              },
+            },
+          },
+        };
+
+        const filteredWhere: any = { ...baseWhere };
+
+        if (query.paymentStatus) {
+          filteredWhere.paymentStatus = query.paymentStatus;
+        }
+        if (query.paymentMethod) {
+          filteredWhere.paymentMethod = query.paymentMethod;
+        }
+
+        const [total, payments, paymentStatusGroups, totalTransactions] = await Promise.all([
+          prisma.payment.count({ where: filteredWhere }),
+          prisma.payment.findMany({
+            where: filteredWhere,
+            skip,
+            take: limit,
+            orderBy: { createdAt: "desc" },
             select: {
-              missionId: true,
-              status: true,
-              serviceRequest: {
+              paymentId: true,
+              transactionReference: true,
+              totalAmount: true,
+              paymentMethod: true,
+              paymentStatus: true,
+              paidAt: true,
+              createdAt: true,
+              mission: {
                 select: {
-                  requestId: true,
-                  requestCode: true,
-                  serviceType: true,
-                  preferredDate: true,
-                  field: {
+                  missionId: true,
+                  status: true,
+                  serviceRequest: {
                     select: {
-                      id: true,
-                      fieldName: true,
-                      cropType: true,
-                      district: true,
+                      requestId: true,
+                      requestCode: true,
+                      serviceType: true,
+                      preferredDate: true,
+                      field: {
+                        select: {
+                          id: true,
+                          fieldName: true,
+                          cropType: true,
+                          district: true,
+                        },
+                      },
                     },
                   },
-                },
-              },
-              pilot: {
-                select: {
-                  userId: true,
-                  user: {
+                  pilot: {
                     select: {
-                      firstName: true,
-                      lastName: true,
+                      userId: true,
+                      user: {
+                        select: {
+                          firstName: true,
+                          lastName: true,
+                        },
+                      },
                     },
                   },
                 },
               },
             },
+          }),
+          prisma.payment.groupBy({
+            by: ["paymentStatus"],
+            where: baseWhere,
+            _sum: {
+              totalAmount: true,
+            },
+          }),
+          prisma.payment.count({
+            where: baseWhere,
+          }),
+        ]);
+
+        let totalPaid = 0;
+        let totalPending = 0;
+
+        for (const g of paymentStatusGroups) {
+          const amt = Number(g._sum.totalAmount || 0);
+          if (g.paymentStatus === "COMPLETED") {
+            totalPaid = amt;
+          } else if (g.paymentStatus === "PENDING") {
+            totalPending = amt;
+          }
+        }
+
+        const items: FarmerPaymentItemDTO[] = payments.map((p) => ({
+          paymentId: p.paymentId,
+          transactionReference: p.transactionReference,
+          totalAmount: Number(p.totalAmount),
+          paymentMethod: p.paymentMethod,
+          paymentStatus: p.paymentStatus,
+          paidAt: p.paidAt,
+          createdAt: p.createdAt,
+          serviceRequest: {
+            requestId: p.mission.serviceRequest.requestId,
+            requestCode: p.mission.serviceRequest.requestCode,
+            serviceType: p.mission.serviceRequest.serviceType,
+            preferredDate: p.mission.serviceRequest.preferredDate,
           },
-        },
-      }),
-      prisma.payment.groupBy({
-        by: ["paymentStatus"],
-        where: baseWhere,
-        _sum: {
-          totalAmount: true,
-        },
-      }),
-      prisma.payment.count({
-        where: baseWhere,
-      }),
-    ]);
+          field: {
+            fieldId: p.mission.serviceRequest.field.id,
+            fieldName: p.mission.serviceRequest.field.fieldName,
+            cropType: p.mission.serviceRequest.field.cropType,
+            district: p.mission.serviceRequest.field.district,
+          },
+          mission: {
+            missionId: p.mission.missionId,
+            status: p.mission.status,
+            pilot: p.mission.pilot
+              ? {
+                  userId: p.mission.pilot.userId,
+                  name: `${p.mission.pilot.user.firstName} ${p.mission.pilot.user.lastName}`.trim(),
+                }
+              : null,
+          },
+        }));
 
-    let totalPaid = 0;
-    let totalPending = 0;
+        const pagination = buildPaginationMeta(total, page, limit);
 
-    for (const g of paymentStatusGroups) {
-      const amt = Number(g._sum.totalAmount || 0);
-      if (g.paymentStatus === "COMPLETED") {
-        totalPaid = amt;
-      } else if (g.paymentStatus === "PENDING") {
-        totalPending = amt;
+        return {
+          payments: items,
+          summary: {
+            totalPaid: Number(totalPaid.toFixed(2)),
+            totalPending: Number(totalPending.toFixed(2)),
+            totalTransactions,
+          },
+          pagination,
+        };
       }
-    }
-
-    const items: FarmerPaymentItemDTO[] = payments.map((p) => ({
-      paymentId: p.paymentId,
-      transactionReference: p.transactionReference,
-      totalAmount: Number(p.totalAmount),
-      paymentMethod: p.paymentMethod,
-      paymentStatus: p.paymentStatus,
-      paidAt: p.paidAt,
-      createdAt: p.createdAt,
-      serviceRequest: {
-        requestId: p.mission.serviceRequest.requestId,
-        requestCode: p.mission.serviceRequest.requestCode,
-        serviceType: p.mission.serviceRequest.serviceType,
-        preferredDate: p.mission.serviceRequest.preferredDate,
-      },
-      field: {
-        fieldId: p.mission.serviceRequest.field.id,
-        fieldName: p.mission.serviceRequest.field.fieldName,
-        cropType: p.mission.serviceRequest.field.cropType,
-        district: p.mission.serviceRequest.field.district,
-      },
-      mission: {
-        missionId: p.mission.missionId,
-        status: p.mission.status,
-        pilot: p.mission.pilot
-          ? {
-              userId: p.mission.pilot.userId,
-              name: `${p.mission.pilot.user.firstName} ${p.mission.pilot.user.lastName}`.trim(),
-            }
-          : null,
-      },
-    }));
-
-    const pagination = buildPaginationMeta(total, page, limit);
-
-    return {
-      payments: items,
-      summary: {
-        totalPaid: Number(totalPaid.toFixed(2)),
-        totalPending: Number(totalPending.toFixed(2)),
-        totalTransactions,
-      },
-      pagination,
-    };
+    );
   }
 
   /**
@@ -821,6 +875,16 @@ export class FarmerService {
       await tx.user.delete({
         where: { userId: farmerId },
       });
+    });
+
+    // Invalidate caches
+    Promise.allSettled([
+      CacheInvalidator.invalidateFarmer(farmerId),
+      CacheInvalidator.invalidateField(undefined, farmerId),
+      CacheInvalidator.invalidateServiceRequest(),
+      CacheInvalidator.invalidateAdminAnalytics(),
+    ]).catch((err) => {
+      console.warn("[FarmerService] Cache invalidation warning:", err.message);
     });
 
     return {

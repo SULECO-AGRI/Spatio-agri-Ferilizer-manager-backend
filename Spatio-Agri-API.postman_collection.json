@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8f3e9b12-5a4c-4e89-b7d1-2c938f71a001",
     "name": "Spatio-Agri Precision Fertilizer Manager API",
-    "description": "Comprehensive Postman collection covering 100% of the Spatio-Agri Precision Fertilizer Management Backend API, including Health Checks, Authentication, Admin Analytics & KPIs with Redis Caching, Pilot Fleet Operations, Farmer Directories, Fields, Service Requests, Missions, and Financials.",
+    "description": "Comprehensive Postman collection covering 100% of the Spatio-Agri Precision Fertilizer Management Backend API, including Health Checks, Authentication (with updated Pilot Service Area registration), Admin Analytics & KPIs with Redis Caching, Pilot Fleet Operations, Farmer Directories, Fields, Service Requests, Missions, and Financials.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -115,7 +115,7 @@
           "response": []
         },
         {
-          "name": "2.2 Register Pilot",
+          "name": "2.2 Register Pilot (With Service Area)",
           "event": [
             {
               "listen": "test",
@@ -138,19 +138,19 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"pilot.kasun@example.com\",\n  \"password\": \"Pilot@123456\",\n  \"firstName\": \"Kasun\",\n  \"lastName\": \"Silva\",\n  \"mobile\": \"0771234567\",\n  \"licenceNumber\": \"CAA-UAV-88412\"\n}"
+              "raw": "{\n  \"email\": \"pilot.nuwan@example.com\",\n  \"password\": \"Pilot@123456\",\n  \"firstName\": \"Nuwan\",\n  \"lastName\": \"Silva\",\n  \"mobile\": \"0779876543\",\n  \"serviceArea\": [\n    [6.9271, 79.8612],\n    [6.9371, 79.8712],\n    [6.9171, 79.8512],\n    [6.9271, 79.8612]\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/register/pilot",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "register", "pilot"]
             },
-            "description": "Registers a new Pilot account with role 'Pilot' and creates 1:1 PilotProfile."
+            "description": "Registers a new Pilot account with serviceArea coordinates (selected on map / polygon), no mandatory license number, and default totalFlightHours = 0.00."
           },
           "response": []
         },
         {
-          "name": "2.3 Login (Admin - Sets Auth Token)",
+          "name": "2.3 Login",
           "event": [
             {
               "listen": "test",
@@ -160,7 +160,7 @@
                   "    var jsonData = pm.response.json();",
                   "    if (jsonData.data && jsonData.data.token) {",
                   "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
-                  "        console.log(\"✅ Saved Admin JWT token to collection variable {{authToken}}\");",
+                  "        console.log(\"Saved token to collection variables.\");",
                   "    }",
                   "}"
                 ],
@@ -180,82 +180,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "login"]
             },
-            "description": "Logs in the default Super Admin user and saves JWT token to collection variable."
+            "description": "Authenticates user credentials and returns JWT bearer access token."
           },
           "response": []
         },
         {
-          "name": "2.4 Login (Farmer)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.data && jsonData.data.token) {",
-                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
-                  "        console.log(\"Saved Farmer token to collection variables.\");",
-                  "    }",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"farmer.kamal@fertilizer.com\",\n  \"password\": \"Farmer@123456\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
-            },
-            "description": "Logs in as a seeded Farmer."
-          },
-          "response": []
-        },
-        {
-          "name": "2.5 Login (Pilot)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.data && jsonData.data.token) {",
-                  "        pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
-                  "        console.log(\"Saved Pilot token to collection variables.\");",
-                  "    }",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"pilot.nimal@fertilizer.com\",\n  \"password\": \"Pilot@123456\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
-            },
-            "description": "Logs in as a seeded Pilot."
-          },
-          "response": []
-        },
-        {
-          "name": "2.6 Get Current User Profile (/auth/me)",
+          "name": "2.4 Current User Profile (Me)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -264,108 +194,17 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "me"]
             },
-            "description": "Retrieves the authenticated user's profile and embedded role profile (Admin, Pilot, or Farmer)."
+            "description": "Retrieves the authenticated user's profile and relation data based on JWT token."
           },
           "response": []
         }
       ]
     },
     {
-      "name": "3. Admin Dashboard & KPI Analytics (Cached)",
+      "name": "3. Admin Dashboard & Operations",
       "item": [
         {
-          "name": "3.1 KPI Summary (4 Core Dashboard Cards)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/summary",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "analytics", "summary"]
-            },
-            "description": "Returns consolidated KPI metrics for Completed Missions, Total Revenue (LKR), Pilot Performance rating, and Farmer Growth % with Redis caching."
-          },
-          "response": []
-        },
-        {
-          "name": "3.2 Completed Missions Analytics",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/completed-missions",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "analytics", "completed-missions"]
-            },
-            "description": "Returns completed missions count, monthly comparisons, and month-over-month growth rate."
-          },
-          "response": []
-        },
-        {
-          "name": "3.3 Revenue Breakdown & Financials",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/revenue",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "analytics", "revenue"]
-            },
-            "description": "Returns total revenue, company commission, pilot earnings, monthly earnings, and growth percentage."
-          },
-          "response": []
-        },
-        {
-          "name": "3.4 Pilot Fleet Performance KPIs",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/pilot-performance",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "analytics", "pilot-performance"]
-            },
-            "description": "Returns fleet-wide pilot performance KPIs, total flight hours, active pilots, and top-performing pilot."
-          },
-          "response": []
-        },
-        {
-          "name": "3.5 Farmer Growth Analytics",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/farmer-growth",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "analytics", "farmer-growth"]
-            },
-            "description": "Returns total farmer count, new monthly acquisitions, and growth percentage."
-          },
-          "response": []
-        },
-        {
-          "name": "3.6 Pilot Performance Table (Paginated & Searchable)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/pilot-performance-table?page=1&limit=10&status=ACTIVE&sortBy=completedMissions&sortOrder=desc",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "analytics", "pilot-performance-table"],
-              "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" },
-                { "key": "status", "value": "ACTIVE" },
-                { "key": "sortBy", "value": "completedMissions" },
-                { "key": "sortOrder", "value": "desc" }
-              ]
-            },
-            "description": "Paginated, searchable, and sortable pilot table for Admin analytics with Redis caching."
-          },
-          "response": []
-        },
-        {
-          "name": "3.7 Full Dashboard Aggregated Overview",
+          "name": "3.1 Dashboard Overview",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -374,61 +213,187 @@
               "host": ["{{baseUrl}}"],
               "path": ["admin", "dashboard"]
             },
-            "description": "Full aggregated executive dashboard overview with KPIs, schedules, and activities."
+            "description": "Aggregates key system metrics, active counts, recent activities, and today's schedule."
           },
           "response": []
         },
         {
-          "name": "3.8 Dashboard Real-time Metrics",
+          "name": "3.2 List All Users",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/admin/dashboard/metrics?periodDays=90",
+              "raw": "{{baseUrl}}/admin/users?page=1&limit=10&search=&role=",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "dashboard", "metrics"],
-              "query": [{ "key": "periodDays", "value": "90" }]
+              "path": ["admin", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "role", "value": "" }
+              ]
             },
-            "description": "Real-time core KPIs, today's revenue, active missions, and mission success rate."
+            "description": "Lists all registered users with role and profile metadata."
           },
           "response": []
         },
         {
-          "name": "3.9 Recent System Activities Feed",
+          "name": "3.3 Change User Role",
           "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/admin/dashboard/activities?limit=6",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "dashboard", "activities"],
-              "query": [{ "key": "limit", "value": "6" }]
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleName\": \"Pilot\"\n}"
             },
-            "description": "Live recent activity audit feed across service requests, assignments, and payments."
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{pilotId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{pilotId}}", "role"]
+            },
+            "description": "Updates the role of a user (Admin Only)."
           },
           "response": []
         },
         {
-          "name": "3.10 Today's Flight & Mission Schedule",
+          "name": "3.4 Activity Logs",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/admin/dashboard/schedule",
+              "raw": "{{baseUrl}}/admin/activity-logs?page=1&limit=20",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "dashboard", "schedule"]
+              "path": ["admin", "activity-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
             },
-            "description": "Today's scheduled drone missions with field coordinates, farmer info, and assigned pilots."
+            "description": "Audit trail log of all system actions and assignments."
           },
           "response": []
         }
       ]
     },
     {
-      "name": "4. Pilots Management",
+      "name": "4. Admin Analytics (Redis Cached)",
       "item": [
         {
-          "name": "4.1 List All Pilots (Directory)",
+          "name": "4.1 Analytics Overview & KPIs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "overview"]
+            },
+            "description": "Cached high-level KPIs: revenue, missions, active pilots, and completion rates."
+          },
+          "response": []
+        },
+        {
+          "name": "4.2 Monthly Revenue Trends",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/revenue-trends?months=6",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "revenue-trends"],
+              "query": [{ "key": "months", "value": "6" }]
+            },
+            "description": "Monthly financial performance and revenue trajectory."
+          },
+          "response": []
+        },
+        {
+          "name": "4.3 Service Request Trends",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/service-request-trends?months=6",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "service-request-trends"],
+              "query": [{ "key": "months", "value": "6" }]
+            },
+            "description": "Historical volume of service requests grouped by status."
+          },
+          "response": []
+        },
+        {
+          "name": "4.4 Pilot Performance Table",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/pilot-performance?page=1&limit=10&sortBy=completedMissions&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "pilot-performance"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "sortBy", "value": "completedMissions" },
+                { "key": "sortOrder", "value": "desc" }
+              ]
+            },
+            "description": "Ranked performance matrix of pilots including flight hours, ratings, and missions."
+          },
+          "response": []
+        },
+        {
+          "name": "4.5 Crop Distribution Analytics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/crop-distribution",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "crop-distribution"]
+            },
+            "description": "Breakdown of crops serviced, land coverage, and request counts."
+          },
+          "response": []
+        },
+        {
+          "name": "4.6 District Demand Heatmap",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/district-heatmap",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "district-heatmap"]
+            },
+            "description": "Geographical distribution of requests and pilot capacity across Sri Lankan districts."
+          },
+          "response": []
+        },
+        {
+          "name": "4.7 Invalidate Analytics Cache",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics/cache/invalidate",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics", "cache", "invalidate"]
+            },
+            "description": "Manually flushes all Redis analytics caches (Admin Only)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Pilots Management",
+      "item": [
+        {
+          "name": "5.1 List All Pilots (Directory)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -443,12 +408,12 @@
                 { "key": "sortOrder", "value": "desc" }
               ]
             },
-            "description": "Lists pilots with search, status filters, and rating sorting."
+            "description": "Lists pilots with search, status filters, ratings, and serviceArea coordinates."
           },
           "response": []
         },
         {
-          "name": "4.2 Get Pilot By ID",
+          "name": "5.2 Get Pilot Profile & Stats",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -457,17 +422,17 @@
               "host": ["{{baseUrl}}"],
               "path": ["pilots", "{{pilotId}}"]
             },
-            "description": "Retrieves comprehensive profile, licence, flight hours, and statistics for a specific pilot."
+            "description": "Detailed pilot profile including flight statistics, earnings, and serviceArea."
           },
           "response": []
         },
         {
-          "name": "4.3 Update Pilot Duty Status",
+          "name": "5.3 Update Pilot Status",
           "request": {
             "method": "PATCH",
             "header": [
               { "key": "Authorization", "value": "Bearer {{authToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "application/json": "application/json" }
             ],
             "body": {
               "mode": "raw",
@@ -478,31 +443,65 @@
               "host": ["{{baseUrl}}"],
               "path": ["pilots", "{{pilotId}}", "status"]
             },
-            "description": "Updates pilot availability status (ACTIVE, INACTIVE, ON_MISSION, SUSPENDED)."
+            "description": "Changes pilot status between ACTIVE, INACTIVE, ON_MISSION, or SUSPENDED."
           },
           "response": []
         },
         {
-          "name": "4.4 Get Pilot Mission History",
+          "name": "5.4 Pilot Assigned Missions History",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/pilots/{{pilotId}}/missions?page=1&limit=10&status=SCHEDULED",
+              "raw": "{{baseUrl}}/pilots/{{pilotId}}/missions?page=1&limit=10",
               "host": ["{{baseUrl}}"],
               "path": ["pilots", "{{pilotId}}", "missions"],
               "query": [
                 { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" },
-                { "key": "status", "value": "SCHEDULED" }
+                { "key": "limit", "value": "10" }
               ]
             },
-            "description": "Retrieves assigned missions for the pilot."
+            "description": "Lists missions assigned to the pilot."
           },
           "response": []
         },
         {
-          "name": "4.5 Start Mission Execution",
+          "name": "5.5 Get Single Mission Details",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/pilots/{{pilotId}}/missions/{{missionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "{{pilotId}}", "missions", "{{missionId}}"]
+            },
+            "description": "Full details of a specific drone mission including field coordinates and farmer contact."
+          },
+          "response": []
+        },
+        {
+          "name": "5.6 Respond to Mission (Accept/Reject)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"ACCEPT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pilots/{{pilotId}}/missions/{{missionId}}/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["pilots", "{{pilotId}}", "missions", "{{missionId}}", "respond"]
+            },
+            "description": "Allows an assigned pilot to ACCEPT or REJECT a scheduled mission."
+          },
+          "response": []
+        },
+        {
+          "name": "5.7 Start Flight Mission",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -511,12 +510,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["pilots", "{{pilotId}}", "missions", "{{missionId}}", "start"]
             },
-            "description": "Transitions scheduled mission to IN_PROGRESS and marks pilot ON_MISSION."
+            "description": "Marks a mission as IN_PROGRESS and sets the pilot status to ON_MISSION."
           },
           "response": []
         },
         {
-          "name": "4.6 Complete Mission Execution",
+          "name": "5.8 Complete Flight Mission",
           "request": {
             "method": "PATCH",
             "header": [
@@ -525,40 +524,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"flightHours\": 1.5,\n  \"fertilizerAppliedKg\": 45.0,\n  \"notes\": \"Spraying completed with 100% boundary coverage.\"\n}"
+              "raw": "{\n  \"areaSpread\": 5.5,\n  \"flightDurationHours\": 1.25,\n  \"pilotNotes\": \"Fertilizer sprayed evenly over the 5.5 acre paddy block.\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/pilots/{{pilotId}}/missions/{{missionId}}/complete",
               "host": ["{{baseUrl}}"],
               "path": ["pilots", "{{pilotId}}", "missions", "{{missionId}}", "complete"]
             },
-            "description": "Completes a mission atomically, logs flight hours, applied kg, and restores pilot status."
+            "description": "Completes the mission, logs flight hours and area sprayed, and creates payout record."
           },
           "response": []
         },
         {
-          "name": "4.7 Pilot Respond to Mission (Accept/Reject)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{authToken}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"response\": \"ACCEPT\",\n  \"reason\": \"Weather conditions optimal, drone prepped\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/pilots/missions/{{missionId}}/respond",
-              "host": ["{{baseUrl}}"],
-              "path": ["pilots", "missions", "{{missionId}}", "respond"]
-            },
-            "description": "Pilot accepts or rejects an assigned mission."
-          },
-          "response": []
-        },
-        {
-          "name": "4.8 Get Pilot Financial Payouts",
+          "name": "5.9 Pilot Payouts History",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -571,12 +549,12 @@
                 { "key": "limit", "value": "10" }
               ]
             },
-            "description": "Retrieves financial payout records and settlement ledger for the pilot."
+            "description": "Lists earnings and payout settlements for the pilot."
           },
           "response": []
         },
         {
-          "name": "4.9 Get Pilot Reviews & Ratings",
+          "name": "5.10 Pilot Customer Reviews",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -589,51 +567,38 @@
                 { "key": "limit", "value": "10" }
               ]
             },
-            "description": "Retrieves performance reviews and customer satisfaction ratings for the pilot."
-          },
-          "response": []
-        },
-        {
-          "name": "4.10 Delete Pilot",
-          "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/pilots/{{pilotId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["pilots", "{{pilotId}}"]
-            },
-            "description": "Deletes pilot profile, duty credentials, and user account. Safeguard prevents deletion if pilot is on mission or has active assignments. Access: Admin or target Pilot."
+            "description": "Lists ratings and reviews left by farmers for completed missions."
           },
           "response": []
         }
       ]
     },
     {
-      "name": "5. Farmers Management",
+      "name": "6. Farmers Management",
       "item": [
         {
-          "name": "5.1 List All Farmers Directory",
+          "name": "6.1 List All Farmers",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/farmers?page=1&limit=10&sortBy=createdAt&sortOrder=desc",
+              "raw": "{{baseUrl}}/farmers?page=1&limit=10&search=&sortBy=createdAt&sortOrder=desc",
               "host": ["{{baseUrl}}"],
               "path": ["farmers"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
                 { "key": "sortBy", "value": "createdAt" },
                 { "key": "sortOrder", "value": "desc" }
               ]
             },
-            "description": "Lists registered farmers with pagination and search."
+            "description": "Lists registered farmers with landholding stats and request counts (Admin Only)."
           },
           "response": []
         },
         {
-          "name": "5.2 Get Farmer By ID",
+          "name": "6.2 Get Farmer Profile",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -642,27 +607,51 @@
               "host": ["{{baseUrl}}"],
               "path": ["farmers", "{{farmerId}}"]
             },
-            "description": "Gets single farmer profile, contact info, and aggregated stats."
+            "description": "Detailed farmer profile with field count, total land size, and completed missions."
           },
           "response": []
         },
         {
-          "name": "5.3 Get Farmer Registered Fields",
+          "name": "6.3 Update Farmer Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Sunil\",\n  \"lastName\": \"Perera\",\n  \"mobile\": \"0712345678\",\n  \"address\": \"45 Lake View Road, Anuradhapura\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/farmers/{{farmerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "{{farmerId}}"]
+            },
+            "description": "Updates contact and address details of a farmer."
+          },
+          "response": []
+        },
+        {
+          "name": "6.4 Get Farmer Fields",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/farmers/{{farmerId}}/fields?cropType=Paddy",
+              "raw": "{{baseUrl}}/farmers/{{farmerId}}/fields?page=1&limit=10",
               "host": ["{{baseUrl}}"],
               "path": ["farmers", "{{farmerId}}", "fields"],
-              "query": [{ "key": "cropType", "value": "Paddy" }]
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
             },
-            "description": "Lists agricultural fields registered to the farmer with GeoJSON boundary telemetry."
+            "description": "Lists all agricultural fields owned by this farmer."
           },
           "response": []
         },
         {
-          "name": "5.4 Register Field for Farmer (Admin or Farmer)",
+          "name": "6.5 Create Field for Farmer",
           "request": {
             "method": "POST",
             "header": [
@@ -671,131 +660,55 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fieldName\": \"North Paddy Field Beta\",\n  \"cropType\": \"Paddy\",\n  \"area\": 12.5,\n  \"locationCoordinates\": [\n    [8.3123, 80.4124],\n    [8.3145, 80.4156],\n    [8.3112, 80.4189],\n    [8.3090, 80.4140]\n  ],\n  \"province\": \"North Central\",\n  \"district\": \"Anuradhapura\",\n  \"city\": \"Tambuttegama\",\n  \"village\": \"Maha Senapura\"\n}"
+              "raw": "{\n  \"fieldName\": \"North Paddy Block A\",\n  \"cropType\": \"Paddy\",\n  \"area\": 4.5,\n  \"locationCoordinates\": [\n    [8.3114, 80.4037],\n    [8.3150, 80.4080],\n    [8.3100, 80.4120],\n    [8.3050, 80.4050]\n  ],\n  \"province\": \"North Central\",\n  \"district\": \"Anuradhapura\",\n  \"city\": \"Medawachchiya\",\n  \"village\": \"Pahalagama\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/farmers/{{farmerId}}/fields",
               "host": ["{{baseUrl}}"],
               "path": ["farmers", "{{farmerId}}", "fields"]
             },
-            "description": "Registers a new agricultural field with coordinates and area. Admins can add a field for any farmer; Farmers can add fields for their own account only."
+            "description": "Registers a new agricultural parcel with polygon coordinates."
           },
           "response": []
         },
         {
-          "name": "5.5 Get Farmer Service History",
+          "name": "6.6 Get Farmer Service Requests",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/farmers/{{farmerId}}/services?page=1&limit=10",
+              "raw": "{{baseUrl}}/farmers/{{farmerId}}/service-requests?page=1&limit=10",
               "host": ["{{baseUrl}}"],
-              "path": ["farmers", "{{farmerId}}", "services"],
+              "path": ["farmers", "{{farmerId}}", "service-requests"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" }
               ]
             },
-            "description": "Lists service requests and mission execution history for a farmer."
+            "description": "Lists all spraying service requests placed by the farmer."
           },
           "response": []
         },
         {
-          "name": "5.6 Get Farmer Payments History",
+          "name": "6.7 Get Farmer Missions",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/farmers/{{farmerId}}/payments?page=1&limit=10",
+              "raw": "{{baseUrl}}/farmers/{{farmerId}}/missions?page=1&limit=10",
               "host": ["{{baseUrl}}"],
-              "path": ["farmers", "{{farmerId}}", "payments"],
+              "path": ["farmers", "{{farmerId}}", "missions"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" }
               ]
             },
-            "description": "Lists billing records, payment status, and invoices for the farmer."
+            "description": "Lists execution history of missions performed on farmer's lands."
           },
           "response": []
         },
         {
-          "name": "5.7 Delete Farmer",
-          "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/farmers/{{farmerId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["farmers", "{{farmerId}}"]
-            },
-            "description": "Deletes farmer profile, registered fields, history, and user account. Safeguard prevents deletion if farmer has active service requests or ongoing missions. Access: Admin or target Farmer."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "6. Fields Management",
-      "item": [
-        {
-          "name": "6.1 List All Fields (Search, Filter, Paginate)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/fields?page=1&limit=10&search=&cropType=Tea&province=Central&district=Nuwara%20Eliya&sortBy=createdAt&sortOrder=desc",
-              "host": ["{{baseUrl}}"],
-              "path": ["fields"],
-              "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" },
-                { "key": "search", "value": "" },
-                { "key": "cropType", "value": "Tea" },
-                { "key": "province", "value": "Central" },
-                { "key": "district", "value": "Nuwara Eliya" },
-                { "key": "sortBy", "value": "createdAt" },
-                { "key": "sortOrder", "value": "desc" }
-              ]
-            },
-            "description": "Lists registered agricultural fields with search across field name, city, village, and farmer name, plus district and crop type filters."
-          },
-          "response": []
-        },
-        {
-          "name": "6.2 Get Field By ID",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/fields/{{fieldId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["fields", "{{fieldId}}"]
-            },
-            "description": "Retrieves comprehensive field information, owner farmer details, boundary polygon coordinates, area, and request counts."
-          },
-          "response": []
-        },
-        {
-          "name": "6.3 Filter Fields By Farmer ID",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/fields?farmerId={{farmerId}}&page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["fields"],
-              "query": [
-                { "key": "farmerId", "value": "{{farmerId}}" },
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" }
-              ]
-            },
-            "description": "Retrieves paginated fields belonging to a specific farmer ID."
-          },
-          "response": []
-        },
-        {
-          "name": "6.4 Create Field (Admin / Schema Aligned)",
+          "name": "6.8 Submit Pilot Review",
           "request": {
             "method": "POST",
             "header": [
@@ -804,40 +717,99 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"farmer_id\": 3,\n  \"field_name\": \"Highland Tea Estate Zone 1\",\n  \"crop_type\": \"Tea\",\n  \"area\": 18.75,\n  \"location_coordinates\": [\n    [6.9271, 80.7781],\n    [6.9295, 80.7812],\n    [6.9255, 80.7845],\n    [6.9230, 80.7800]\n  ],\n  \"province\": \"Central\",\n  \"district\": \"Nuwara Eliya\",\n  \"city\": \"Nuwara Eliya\",\n  \"village\": \"Pedro\"\n}"
+              "raw": "{\n  \"missionId\": {{missionId}},\n  \"rating\": 5,\n  \"comment\": \"Excellent precision spraying! Arrived on time and covered the entire paddy block.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/farmers/{{farmerId}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["farmers", "{{farmerId}}", "reviews"]
+            },
+            "description": "Allows a farmer to submit a 1-5 star review for a completed mission."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Agricultural Fields",
+      "item": [
+        {
+          "name": "7.1 List All Fields",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/fields?page=1&limit=10&cropType=Paddy",
+              "host": ["{{baseUrl}}"],
+              "path": ["fields"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "cropType", "value": "Paddy" }
+              ]
+            },
+            "description": "Lists fields across the platform with filtering by crop type, district, and province."
+          },
+          "response": []
+        },
+        {
+          "name": "7.2 Get Field by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/fields/{{fieldId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["fields", "{{fieldId}}"]
+            },
+            "description": "Retrieves field geospatial coordinates, boundary polygon, and crop history."
+          },
+          "response": []
+        },
+        {
+          "name": "7.3 Create Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldName\": \"Southern Corn Field\",\n  \"cropType\": \"Corn\",\n  \"area\": 6.2,\n  \"locationCoordinates\": [\n    [8.3200, 80.4100],\n    [8.3250, 80.4150],\n    [8.3180, 80.4200],\n    [8.3120, 80.4120]\n  ],\n  \"province\": \"North Central\",\n  \"district\": \"Anuradhapura\",\n  \"city\": \"Kekirawa\",\n  \"village\": \"Maradankadawala\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/fields",
               "host": ["{{baseUrl}}"],
               "path": ["fields"]
             },
-            "description": "Creates and registers a new agricultural field matching exact PostgreSQL schema columns and Prisma models."
+            "description": "Creates a new agricultural field for the authenticated farmer."
           },
           "response": []
         },
         {
-          "name": "6.5 Update Field By ID (Partial Update)",
+          "name": "7.4 Update Field",
           "request": {
-            "method": "PATCH",
+            "method": "PUT",
             "header": [
               { "key": "Authorization", "value": "Bearer {{authToken}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"field_name\": \"Highland Tea Estate - Renovated Sector A\",\n  \"crop_type\": \"Tea\",\n  \"area\": 20.00,\n  \"city\": \"Nuwara Eliya\",\n  \"village\": \"Pedro\"\n}"
+              "raw": "{\n  \"fieldName\": \"Southern Corn Field - Section 1\",\n  \"cropType\": \"Maize\",\n  \"area\": 6.5\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/fields/{{fieldId}}",
               "host": ["{{baseUrl}}"],
               "path": ["fields", "{{fieldId}}"]
             },
-            "description": "Performs partial mutation on field metadata, crop type, acreage, and coordinates."
+            "description": "Updates field attributes, boundary coordinates, or crop type."
           },
           "response": []
         },
         {
-          "name": "6.6 Delete Field By ID (Safeguarded)",
+          "name": "7.5 Delete Field",
           "request": {
             "method": "DELETE",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -846,17 +818,34 @@
               "host": ["{{baseUrl}}"],
               "path": ["fields", "{{fieldId}}"]
             },
-            "description": "Deletes an agricultural field record and purges Redis cache. Rejects with 409 Conflict if active service requests or missions are linked."
+            "description": "Removes a field if it has no active/in-progress service requests."
           },
           "response": []
         }
       ]
     },
     {
-      "name": "7. Service Requests & Mission Dispatch",
+      "name": "8. Service Requests & Pilot Assignment",
       "item": [
         {
-          "name": "7.1 Create Service Request",
+          "name": "8.1 Create Service Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.requestId) {",
+                  "        pm.collectionVariables.set(\"requestId\", jsonData.data.requestId.toString());",
+                  "        console.log(\"Saved requestId: \" + jsonData.data.requestId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -865,52 +854,40 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fieldId\": 1,\n  \"priority\": \"MEDIUM\",\n  \"scheduledDate\": \"2026-09-10T08:00:00Z\",\n  \"notes\": \"Precision fertilizer application across zone A\"\n}"
+              "raw": "{\n  \"fieldId\": {{fieldId}},\n  \"serviceType\": \"FERTILIZING\",\n  \"preferredDate\": \"2026-09-25T08:00:00.000Z\",\n  \"priority\": \"HIGH\",\n  \"fertilizerType\": \"Urea / NPK Standard Blend\",\n  \"specialNotes\": \"Target early morning before wind pick up.\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/service-requests",
               "host": ["{{baseUrl}}"],
               "path": ["service-requests"]
             },
-            "description": "Creates a new agricultural spraying service request for a registered field."
+            "description": "Creates a new precision spraying service request with auto-calculated cost estimates."
           },
           "response": []
         },
         {
-          "name": "7.2 List All Service Requests",
+          "name": "8.2 List All Service Requests",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/service-requests?page=1&limit=10&status=PENDING",
+              "raw": "{{baseUrl}}/service-requests?page=1&limit=10&status=PENDING&sortBy=createdAt&sortOrder=desc",
               "host": ["{{baseUrl}}"],
               "path": ["service-requests"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
-                { "key": "status", "value": "PENDING" }
+                { "key": "status", "value": "PENDING" },
+                { "key": "sortBy", "value": "createdAt" },
+                { "key": "sortOrder", "value": "desc" }
               ]
             },
-            "description": "Lists service requests (Admin sees all; Farmer sees own; Pilot sees assigned)."
+            "description": "Lists service requests with filtering by status, priority, and date."
           },
           "response": []
         },
         {
-          "name": "7.3 Get Service Request Status Counts",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/service-requests/counts",
-              "host": ["{{baseUrl}}"],
-              "path": ["service-requests", "counts"]
-            },
-            "description": "Returns aggregated counts across all service request statuses (PENDING, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED)."
-          },
-          "response": []
-        },
-        {
-          "name": "7.4 Get Service Request By ID",
+          "name": "8.3 Get Service Request by ID",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -919,12 +896,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["service-requests", "{{requestId}}"]
             },
-            "description": "Detailed inspection of a single service request with field telemetry and mission status."
+            "description": "Retrieves comprehensive service request details including farmer info, field geometry, and assigned missions."
           },
           "response": []
         },
         {
-          "name": "7.5 Get Candidate Pilots Ranking",
+          "name": "8.4 Get Ranked Candidate Pilots (Spatial Proximity)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
@@ -933,12 +910,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["service-requests", "{{requestId}}", "candidate-pilots"]
             },
-            "description": "Returns AI-scored and ranked available pilots for dispatching this service request."
+            "description": "Evaluates candidate pilots by computing distance from field centroid to pilot service area centroid, composite match score (distance 45%, rating 35%, experience 20%), and schedule availability."
           },
           "response": []
         },
         {
-          "name": "7.6 Assign Pilot to Service Request",
+          "name": "8.5 Assign Pilot to Request (Admin Only)",
           "request": {
             "method": "POST",
             "header": [
@@ -947,19 +924,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"pilotId\": 2,\n  \"scheduledDate\": \"2026-09-10T08:30:00Z\",\n  \"estimatedDurationMinutes\": 60\n}"
+              "raw": "{\n  \"pilotId\": {{pilotId}},\n  \"pilotNotes\": \"Assigned based on proximity to Anuradhapura North sector.\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/service-requests/{{requestId}}/assign",
+              "raw": "{{baseUrl}}/service-requests/{{requestId}}/assign-pilot",
               "host": ["{{baseUrl}}"],
-              "path": ["service-requests", "{{requestId}}", "assign"]
+              "path": ["service-requests", "{{requestId}}", "assign-pilot"]
             },
-            "description": "Assigns a pilot, schedules a flight mission, and automatically purges relevant Redis caches."
+            "description": "Assigns a candidate pilot, updates request status to ASSIGNED, and creates a scheduled mission."
           },
           "response": []
         },
         {
-          "name": "7.7 Update Service Request Status",
+          "name": "8.6 Update Request Status",
           "request": {
             "method": "PATCH",
             "header": [
@@ -968,14 +945,35 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"CANCELLED\",\n  \"reason\": \"Requested by farmer\"\n}"
+              "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/service-requests/{{requestId}}/status",
               "host": ["{{baseUrl}}"],
               "path": ["service-requests", "{{requestId}}", "status"]
             },
-            "description": "Updates lifecycle status of a service request."
+            "description": "Manually transitions service request status (Admin Only)."
+          },
+          "response": []
+        },
+        {
+          "name": "8.7 Cancel Service Request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Weather conditions unsuitable for aerial spraying.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service-requests/{{requestId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests", "{{requestId}}", "cancel"]
+            },
+            "description": "Cancels a pending or assigned service request."
           },
           "response": []
         }

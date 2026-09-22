@@ -1,4 +1,4 @@
-import { PaginationMeta } from "./farmer.types";
+import { PaginationMeta } from "./common.types";
 import { PageInfo } from "../utils/pagination";
 
 export interface CreateServiceRequestDTO {
@@ -76,7 +76,7 @@ export interface ServiceRequestListItemDTO {
     userId: number;
     fullName: string;
     mobile: string;
-    licenceNumber: string;
+    licenceNumber: string | null;
     status: string;
   } | null;
   mission: {
@@ -134,7 +134,7 @@ export interface ServiceRequestDetailDTO {
       userId: number;
       fullName: string;
       mobile: string;
-      licenceNumber: string;
+      licenceNumber: string | null;
       status: string;
       ratings: number | null;
     } | null;
@@ -189,7 +189,8 @@ export interface CandidatePilotDTO {
   fullName: string;
   email: string;
   mobile: string;
-  licenceNumber: string;
+  licenceNumber: string | null;
+  serviceArea?: any;
   status: string;
   rating: number;
   distanceKm: number;

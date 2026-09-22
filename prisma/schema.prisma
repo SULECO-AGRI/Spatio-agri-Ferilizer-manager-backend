@@ -148,7 +148,8 @@ model AdminProfile {
 
 model PilotProfile {
   userId            Int         @id @map("user_id")
-  licenceNumber     String      @unique @db.VarChar(50) @map("licence_number")
+  licenceNumber     String?     @unique @db.VarChar(50) @map("licence_number")
+  serviceArea       Json?       @map("service_area")
   status            PilotStatus @default(INACTIVE) @map("status")
   ratings           Decimal?    @default(5.00) @db.Decimal(3, 2) @map("ratings")
   completedMissions Int         @default(0) @map("completed_missions")

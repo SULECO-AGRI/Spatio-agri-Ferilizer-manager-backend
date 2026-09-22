@@ -1,4 +1,4 @@
-import { PaginationMeta } from "./farmer.types";
+import { PaginationMeta } from "./common.types";
 
 export interface AdminAnalyticsSummaryDTO {
   completedMissions: {
@@ -88,7 +88,7 @@ export interface PilotPerformanceTableRowDTO {
   pilotName: string;
   email: string;
   mobile: string;
-  licenceNumber: string;
+  licenceNumber: string | null;
   status: string;
   missions: {
     completedMissions: number;

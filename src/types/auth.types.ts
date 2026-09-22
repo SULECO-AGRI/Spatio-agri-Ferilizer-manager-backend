@@ -14,7 +14,12 @@ export interface RegisterPilotDTO {
   firstName: string;
   lastName: string;
   mobile: string;
-  licenceNumber: string;
+  licenceNumber?: string;
+  serviceArea?: any;
+  service_area?: any;
+  coverageArea?: any;
+  locationCoordinates?: any;
+  location_coordinates?: any;
   totalFlightHours?: number;
 }
 
@@ -38,7 +43,8 @@ export interface FarmerProfileData {
 
 export interface PilotProfileData {
   userId: number;
-  licenceNumber: string;
+  licenceNumber: string | null;
+  serviceArea?: any;
   status: string;
   ratings: any;
   completedMissions: number;

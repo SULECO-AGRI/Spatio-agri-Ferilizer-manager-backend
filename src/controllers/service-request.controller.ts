@@ -1,13 +1,5 @@
 import { Request, Response } from "express";
 import { ServiceRequestService } from "../services/service-request.service";
-import {
-  ServiceRequestCacheService,
-  SERVICE_REQUEST_CACHE_TTL,
-} from "../services/service-request-cache.service";
-import { PilotCacheService } from "../services/pilot-cache.service";
-import { FarmerCacheService } from "../services/farmer-cache.service";
-import { AdminAnalyticsCacheService } from "../services/admin-analytics-cache.service";
-import { CacheService } from "../utils/cache";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 import { sendSuccess, sendCreated, sendPaginated } from "../utils/response";
@@ -29,16 +21,6 @@ export class ServiceRequestController {
         req.user
       );
 
-      // Event-driven cache purging on new request creation (service requests & farmer caches)
-      Promise.allSettled([
-        ServiceRequestCacheService.invalidateServiceRequestCaches(
-          result.requestId
-        ),
-        FarmerCacheService.invalidateFarmerCaches(req.user.userId),
-      ]).catch((err) => {
-        console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
-      });
-
       sendCreated(
         res,
         { serviceRequest: result },
@@ -54,30 +36,10 @@ export class ServiceRequestController {
    */
   public static getAllServiceRequests = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const isCursorMode =
-        req.query.cursor !== undefined ||
-        (req.query.take !== undefined && req.query.page === undefined);
-
-      const cacheKey = isCursorMode
-        ? ServiceRequestCacheService.buildCursorCacheKey(
-            req.query as any,
-            req.user
-          )
-        : ServiceRequestCacheService.buildListCacheKey(
-            req.query as any,
-            req.user
-          );
-
-      const { data: result } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.LIST_SECONDS,
-        fetchFn: () =>
-          ServiceRequestService.getAllServiceRequests(
-            req.query as any,
-            req.user
-          ),
-        res,
-      });
+      const result = await ServiceRequestService.getAllServiceRequests(
+        req.query as any,
+        req.user
+      );
 
       if ("pageInfo" in result) {
         sendSuccess(res, {
@@ -101,35 +63,11 @@ export class ServiceRequestController {
   /**
    * GET /service-requests/:id
    * Get single service request details with full farmer, field, mission & pilot info
-   * Cache-Aside enabled with X-Cache header and RBAC guard
    */
   public static getServiceRequestById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const requestId = Number(req.params.id);
-      const cacheKey = ServiceRequestCacheService.buildDetailCacheKey(requestId);
-
-      const { data: result } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.DETAIL_SECONDS,
-        fetchFn: () =>
-          ServiceRequestService.getServiceRequestById(requestId, req.user),
-        res,
-      });
-
-      // Post-cache RBAC verification to prevent cross-tenant data leaks
-      const currentUser = req.user;
-      if (currentUser) {
-        const userRole = currentUser.role.toLowerCase();
-        if (userRole === "farmer" && result.farmer.userId !== currentUser.userId) {
-          throw AppError.forbidden("Access denied. You can only view your own service requests.");
-        }
-        if (
-          userRole === "pilot" &&
-          !result.missions.some((m) => m.pilot?.userId === currentUser.userId)
-        ) {
-          throw AppError.forbidden("Access denied. You can only view service requests assigned to you.");
-        }
-      }
+      const result = await ServiceRequestService.getServiceRequestById(requestId, req.user);
 
       sendSuccess(res, { serviceRequest: result });
     }
@@ -174,16 +112,6 @@ export class ServiceRequestController {
         req.body
       );
 
-      // Event-driven cache purging on pilot assignment
-      Promise.allSettled([
-        ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
-        PilotCacheService.invalidatePilotCaches(req.body.pilotId),
-        FarmerCacheService.invalidateFarmerCaches(),
-        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
-      ]).catch((err) => {
-        console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
-      });
-
       sendSuccess(
         res,
         { serviceRequest: result },
@@ -205,15 +133,6 @@ export class ServiceRequestController {
         req.user
       );
 
-      // Event-driven cache purging on status lifecycle transition
-      Promise.allSettled([
-        ServiceRequestCacheService.invalidateServiceRequestCaches(requestId),
-        FarmerCacheService.invalidateFarmerCaches(),
-        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
-      ]).catch((err) => {
-        console.warn("[ServiceRequestController] Cache invalidation warning:", err.message);
-      });
-
       sendSuccess(
         res,
         { serviceRequest: result },
@@ -225,20 +144,13 @@ export class ServiceRequestController {
   /**
    * GET /service-requests/counts
    * Get aggregated service request status counts (pending, assigned, inProgress, completed, cancelled, rejected, total)
-   * Cache-Aside enabled with X-Cache header and RBAC tenancy scoping
    */
   public static getStatusCounts = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const cacheKey = ServiceRequestCacheService.buildStatusCountsCacheKey(req.user);
-
-      const { data: counts } = await CacheService.getCachedOrFetch({
-        key: cacheKey,
-        ttlSeconds: SERVICE_REQUEST_CACHE_TTL.COUNTS_SECONDS,
-        fetchFn: () => ServiceRequestService.getStatusCounts(req.user),
-        res,
-      });
+      const counts = await ServiceRequestService.getStatusCounts(req.user);
 
       sendSuccess(res, counts, "Service request status counts retrieved successfully.");
     }
   );
 }
+

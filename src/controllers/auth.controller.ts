@@ -1,8 +1,5 @@
 import { Request, Response } from "express";
 import { AuthService } from "../services/auth.service";
-import { PilotCacheService } from "../services/pilot-cache.service";
-import { FarmerCacheService } from "../services/farmer-cache.service";
-import { AdminAnalyticsCacheService } from "../services/admin-analytics-cache.service";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 import { sendSuccess, sendCreated } from "../utils/response";
@@ -14,15 +11,6 @@ export class AuthController {
   public static registerFarmer = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await AuthService.registerFarmer(req.body);
-
-      // Invalidate farmer directory list caches and admin analytics on new farmer registration
-      Promise.allSettled([
-        FarmerCacheService.invalidateFarmerCaches(),
-        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
-      ]).catch((err) => {
-        console.warn("[AuthController] Cache invalidation warning:", err.message);
-      });
-
       sendCreated(res, result, "Farmer registered successfully.");
     }
   );
@@ -33,15 +21,6 @@ export class AuthController {
   public static registerPilot = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const result = await AuthService.registerPilot(req.body);
-
-      // Invalidate pilot directory list caches and admin analytics on new pilot registration
-      Promise.allSettled([
-        PilotCacheService.invalidatePilotCaches(),
-        AdminAnalyticsCacheService.invalidateAdminAnalyticsCaches(),
-      ]).catch((err) => {
-        console.warn("[AuthController] Cache invalidation warning:", err.message);
-      });
-
       sendCreated(res, result, "Pilot registered successfully.");
     }
   );

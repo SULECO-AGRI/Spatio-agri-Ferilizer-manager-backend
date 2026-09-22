@@ -1,4 +1,4 @@
-import { PaginationMeta } from "./farmer.types";
+import { PaginationMeta } from "./common.types";
 
 export interface FieldQueryDTO {
   page?: number;
