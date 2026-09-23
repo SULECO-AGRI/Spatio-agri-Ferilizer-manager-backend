@@ -1120,6 +1120,136 @@ export class ServiceRequestService {
   }
 
   /**
+   * 7. DELETE SERVICE REQUEST (Admin, or Farmer for own eligible requests)
+   */
+  public static async deleteServiceRequest(
+    requestId: number,
+    requestUser?: JwtPayload
+  ): Promise<{ requestId: number; requestCode: string; status: string }> {
+    if (!requestUser) {
+      throw AppError.unauthorized("Authentication required.");
+    }
+
+    const serviceRequest = await prisma.serviceRequest.findUnique({
+      where: { requestId },
+      include: {
+        field: true,
+        missions: {
+          include: {
+            payment: true,
+            review: true,
+          },
+        },
+      },
+    });
+
+    if (!serviceRequest) {
+      throw AppError.notFound(`Service request with ID ${requestId} not found.`);
+    }
+
+    const userRole = requestUser.role.toLowerCase();
+
+    // RBAC & IDOR: Check ownership if caller is Farmer
+    if (userRole === "farmer") {
+      if (serviceRequest.field.farmerId !== requestUser.userId) {
+        throw AppError.forbidden("Access denied. You can only delete your own service requests.");
+      }
+      // Farmers can only delete requests in PENDING, CANCELLED, or REJECTED status
+      if (
+        serviceRequest.status !== RequestStatus.PENDING &&
+        serviceRequest.status !== RequestStatus.CANCELLED &&
+        serviceRequest.status !== RequestStatus.REJECTED
+      ) {
+        throw AppError.conflict(
+          `Cannot delete service request in '${serviceRequest.status}' status. Only PENDING, CANCELLED, or REJECTED requests can be deleted.`
+        );
+      }
+    } else if (userRole === "admin") {
+      // Admins cannot delete if active mission is IN_PROGRESS
+      const hasActiveMissionInProgress = serviceRequest.missions.some(
+        (m) => m.status === MissionStatus.IN_PROGRESS
+      );
+      if (serviceRequest.status === RequestStatus.IN_PROGRESS || hasActiveMissionInProgress) {
+        throw AppError.conflict(
+          "Cannot delete service request with active mission in progress. Please complete or cancel the mission first."
+        );
+      }
+
+      // Check if any mission has completed payment or settled payout
+      const hasCompletedPaymentOrSettledPayout = serviceRequest.missions.some(
+        (m) =>
+          m.payment &&
+          (m.payment.paymentStatus === "COMPLETED" ||
+            m.payment.payoutStatus === "SETTLED")
+      );
+      if (hasCompletedPaymentOrSettledPayout) {
+        throw AppError.conflict(
+          "Cannot delete service request with completed payments or settled payouts."
+        );
+      }
+    } else {
+      throw AppError.forbidden("Access denied. You do not have permission to delete service requests.");
+    }
+
+    // Collect pilot IDs for cache invalidation
+    const pilotIds = serviceRequest.missions
+      .map((m) => m.pilotId)
+      .filter((id): id is number => id !== null && id !== undefined);
+
+    // Atomic cascade delete
+    await prisma.$transaction(async (tx) => {
+      const missionIds = serviceRequest.missions.map((m) => m.missionId);
+
+      if (missionIds.length > 0) {
+        // Delete payments linked to missions
+        await tx.payment.deleteMany({
+          where: { missionId: { in: missionIds } },
+        });
+
+        // Delete reviews linked to missions
+        await tx.review.deleteMany({
+          where: { missionId: { in: missionIds } },
+        });
+
+        // Delete missions linked to service request
+        await tx.mission.deleteMany({
+          where: { requestId },
+        });
+      }
+
+      // Delete the service request itself
+      await tx.serviceRequest.delete({
+        where: { requestId },
+      });
+    });
+
+    // Log persistent audit trail
+    logActivity({
+      userId: requestUser.userId,
+      action: "REQUEST_DELETED",
+      entityType: "SERVICE_REQUEST",
+      entityId: requestId,
+      details: `Service request ${serviceRequest.requestCode} deleted by ${requestUser.role}.`,
+    });
+
+    // Invalidate affected caches
+    await CacheInvalidator.invalidateServiceRequest(requestId);
+    await CacheInvalidator.invalidateFarmer(serviceRequest.field.farmerId);
+    await CacheInvalidator.invalidateField(serviceRequest.fieldId, serviceRequest.field.farmerId);
+    await CacheInvalidator.invalidateAdminAnalytics();
+
+    for (const pilotId of pilotIds) {
+      await CacheInvalidator.invalidatePilot(pilotId);
+    }
+
+    return {
+      requestId: serviceRequest.requestId,
+      requestCode: serviceRequest.requestCode,
+      status: serviceRequest.status,
+    };
+  }
+
+  /**
    * Helper: Maps raw Prisma service request record to ServiceRequestListItemDTO
    */
   private static mapToListItemDTO(req: any): ServiceRequestListItemDTO {
@@ -1176,4 +1306,5 @@ export class ServiceRequestService {
     };
   }
 }
+
 

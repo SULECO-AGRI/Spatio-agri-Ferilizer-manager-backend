@@ -152,5 +152,25 @@ export class ServiceRequestController {
       sendSuccess(res, counts, "Service request status counts retrieved successfully.");
     }
   );
+
+  /**
+   * DELETE /service-requests/:id
+   * Delete a service request (Admin, or Farmer for own eligible requests)
+   */
+  public static deleteServiceRequest = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const requestId = Number(req.params.id);
+      const result = await ServiceRequestService.deleteServiceRequest(
+        requestId,
+        req.user
+      );
+
+      sendSuccess(
+        res,
+        { deleted: result },
+        "Service request deleted successfully."
+      );
+    }
+  );
 }
 

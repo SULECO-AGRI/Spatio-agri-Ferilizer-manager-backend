@@ -104,4 +104,17 @@ router.patch(
   ServiceRequestController.updateStatus
 );
 
+/**
+ * @route   DELETE /service-requests/:id
+ * @desc    Delete a service request (Admin, or Farmer for own eligible requests)
+ * @access  Private (Admin, Farmer)
+ */
+router.delete(
+  "/:id",
+  authorize("Admin", "Farmer"),
+  validateParams(serviceRequestIdParamSchema),
+  ServiceRequestController.deleteServiceRequest
+);
+
 export default router;
+
