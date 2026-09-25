@@ -137,7 +137,7 @@ export class PilotService {
         orderBy = { pilotProfile: { totalFlightHours: sortOrder } };
       }
 
-      const [total, pilots] = await prisma.$transaction([
+      const [total, pilots] = await Promise.all([
         prisma.user.count({ where: whereClause }),
         prisma.user.findMany({
           where: whereClause,

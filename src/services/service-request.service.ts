@@ -13,12 +13,7 @@ import {
   CandidatePilotsResponseDTO,
 } from "../types/service-request.types";
 import { JwtPayload } from "../types/auth.types";
-import {
-  extractFieldCentroid,
-  calculateHaversineDistance,
-  calculatePilotMatchScore,
-  DEFAULT_BASE_COORDINATES,
-} from "./pilot-ranking.service";
+import { PilotSuggestionService } from "./pilot-suggestion.service";
 import {
   CacheService,
   CacheKeyBuilder,
@@ -166,6 +161,7 @@ export class ServiceRequestService {
         fieldName: newRequest.field.fieldName,
         cropType: newRequest.field.cropType,
         area: Number(newRequest.field.area),
+        locationCoordinates: newRequest.field.locationCoordinates,
         district: newRequest.field.district,
         province: newRequest.field.province,
         city: newRequest.field.city,
@@ -742,140 +738,14 @@ export class ServiceRequestService {
 
   /**
    * 4. PILOT RECOMMENDATION & RANKING ENGINE (Admin Only)
-   * Evaluates active pilots, filters conflict dates, computes Haversine distances & multi-factor match scores.
+   * Delegates candidate discovery, availability filtering, geofence matching, and proximity ranking
+   * to dedicated PilotSuggestionService.
    */
   public static async getCandidatePilots(
     requestId: number,
     requestUser?: JwtPayload
   ): Promise<CandidatePilotsResponseDTO> {
-    if (!requestUser) {
-      throw AppError.unauthorized("Authentication required.");
-    }
-
-    const userRole = requestUser.role.toLowerCase();
-    if (userRole !== "admin") {
-      throw AppError.forbidden("Access denied. Pilot recommendation is restricted to Administrators.");
-    }
-
-    // 1. Fetch service request along with field and farmer context
-    const serviceRequest = await prisma.serviceRequest.findUnique({
-      where: { requestId },
-      include: {
-        field: true,
-      },
-    });
-
-    if (!serviceRequest) {
-      throw AppError.notFound(`Service request with ID ${requestId} not found.`);
-    }
-
-    // 2. Extract field centroid coordinates
-    const fieldCentroid = extractFieldCentroid(
-      serviceRequest.field.locationCoordinates,
-      serviceRequest.field.district
-    );
-
-    // 3. Preferred date normalization for flight conflict check
-    const preferredDate = new Date(serviceRequest.preferredDate);
-    const dayStart = new Date(preferredDate);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(preferredDate);
-    dayEnd.setUTCHours(23, 59, 59, 999);
-
-    // 4. Query all active pilots
-    const activePilots = await prisma.user.findMany({
-      where: {
-        role: { name: "Pilot" },
-        pilotProfile: {
-          status: PilotStatus.ACTIVE,
-        },
-      },
-      include: {
-        pilotProfile: true,
-        assignedMissions: {
-          where: {
-            status: {
-              in: [MissionStatus.SCHEDULED, MissionStatus.IN_PROGRESS],
-            },
-            serviceRequest: {
-              preferredDate: {
-                gte: dayStart,
-                lte: dayEnd,
-              },
-            },
-          },
-          select: { missionId: true },
-        },
-      },
-    });
-
-    // 5. Filter out pilots who already have an active/scheduled mission on the same preferred date
-    const availablePilots = activePilots.filter(
-      (pilot) => !pilot.assignedMissions || pilot.assignedMissions.length === 0
-    );
-
-    // 6. Compute distance & composite match score for each candidate
-    const candidates: CandidatePilotDTO[] = availablePilots.map((pilot) => {
-      const profile = pilot.pilotProfile!;
-      const pilotBaseCoords = profile.serviceArea
-        ? extractFieldCentroid(profile.serviceArea)
-        : DEFAULT_BASE_COORDINATES;
-
-      const distanceKm = calculateHaversineDistance(
-        fieldCentroid.lat,
-        fieldCentroid.lng,
-        pilotBaseCoords.lat,
-        pilotBaseCoords.lng
-      );
-
-      const ratingNum = profile.ratings !== null && profile.ratings !== undefined ? Number(profile.ratings) : 5.0;
-      const completedMissions = profile.completedMissions || 0;
-      const totalFlightHours = Number(profile.totalFlightHours || 0);
-
-      const { matchScore, breakdown } = calculatePilotMatchScore({
-        distanceKm,
-        rating: ratingNum,
-        completedMissions,
-        totalFlightHours,
-      });
-
-      return {
-        pilotId: pilot.userId,
-        fullName: `${pilot.firstName} ${pilot.lastName}`.trim(),
-        email: pilot.email,
-        mobile: pilot.mobile,
-        licenceNumber: profile.licenceNumber ?? null,
-        serviceArea: profile.serviceArea ?? null,
-        status: profile.status,
-        rating: ratingNum,
-        distanceKm,
-        completedMissions,
-        totalFlightHours,
-        matchScore,
-        scoreBreakdown: breakdown,
-      };
-    });
-
-    // 7. Sort candidates descending by composite matchScore (highest score first)
-    candidates.sort((a, b) => b.matchScore - a.matchScore);
-
-    return {
-      requestId: serviceRequest.requestId,
-      requestCode: serviceRequest.requestCode,
-      preferredDate: serviceRequest.preferredDate,
-      field: {
-        id: serviceRequest.field.id,
-        fieldName: serviceRequest.field.fieldName,
-        cropType: serviceRequest.field.cropType,
-        area: Number(serviceRequest.field.area),
-        district: serviceRequest.field.district,
-        province: serviceRequest.field.province,
-        city: serviceRequest.field.city,
-        coordinates: fieldCentroid,
-      },
-      totalCandidates: candidates.length,
-      candidates,
-    };
+    return PilotSuggestionService.suggestPilotsForRequest(requestId, requestUser);
   }
 
   /**
@@ -902,7 +772,7 @@ export class ServiceRequestService {
       );
     }
 
-    // 2. Verify pilot exists and is active/not suspended
+    // 2. Verify pilot exists and is strictly ACTIVE (completely exclude INACTIVE / SUSPENDED)
     const pilot = await prisma.user.findFirst({
       where: {
         userId: dto.pilotId,
@@ -915,17 +785,44 @@ export class ServiceRequestService {
       throw AppError.notFound(`Pilot with ID ${dto.pilotId} not found.`);
     }
 
-    if (pilot.pilotProfile.status === PilotStatus.SUSPENDED) {
-      throw AppError.badRequest("Cannot assign a suspended pilot to a mission.");
-    }
-
     if (pilot.pilotProfile.status !== PilotStatus.ACTIVE) {
       throw AppError.badRequest(
-        `Cannot assign pilot. Pilot profile is '${pilot.pilotProfile.status}' (must be 'ACTIVE').`
+        `Cannot assign pilot. Pilot is currently '${pilot.pilotProfile.status}'. Only ACTIVE pilots can be assigned to service requests.`
       );
     }
 
-    // 3. Atomic state transition: Schedule mission and update request status to ASSIGNED
+    // 3. Prevent schedule conflict / double-booking on the preferred date
+    const preferredDate = new Date(serviceRequest.preferredDate);
+    const dayStart = new Date(preferredDate);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(preferredDate);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+
+    const conflictingMission = await prisma.mission.findFirst({
+      where: {
+        pilotId: dto.pilotId,
+        status: { in: [MissionStatus.SCHEDULED, MissionStatus.IN_PROGRESS] },
+        serviceRequest: {
+          preferredDate: {
+            gte: dayStart,
+            lte: dayEnd,
+          },
+        },
+      },
+      include: {
+        serviceRequest: {
+          select: { requestCode: true },
+        },
+      },
+    });
+
+    if (conflictingMission) {
+      throw AppError.badRequest(
+        `Cannot assign pilot. Pilot ${pilot.firstName} ${pilot.lastName} already has a mission scheduled (${conflictingMission.serviceRequest?.requestCode || "active"}) on ${preferredDate.toISOString().split("T")[0]}.`
+      );
+    }
+
+    // 4. Atomic state transition: Schedule mission and update request status to ASSIGNED
     await prisma.$transaction(async (tx) => {
       const existingMission = serviceRequest.missions[0];
 
@@ -1287,6 +1184,7 @@ export class ServiceRequestService {
         fieldName: req.field.fieldName,
         cropType: req.field.cropType,
         area: Number(req.field.area),
+        locationCoordinates: req.field.locationCoordinates,
         district: req.field.district,
         province: req.field.province,
         city: req.field.city,

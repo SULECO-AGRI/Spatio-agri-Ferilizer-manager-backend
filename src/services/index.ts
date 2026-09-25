@@ -3,6 +3,7 @@ export * from "./farmer.service";
 export * from "./field.service";
 export * from "./pilot.service";
 export * from "./pilot-ranking.service";
+export * from "./pilot-suggestion.service";
 export * from "./service-request.service";
 export * from "./admin.service";
 export * from "./admin-analytics.service";

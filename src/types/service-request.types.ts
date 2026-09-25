@@ -67,6 +67,7 @@ export interface ServiceRequestListItemDTO {
     fieldName: string;
     cropType: string;
     area: number;
+    locationCoordinates: any;
     district: string;
     province: string;
     city: string;
@@ -197,6 +198,8 @@ export interface CandidatePilotDTO {
   completedMissions: number;
   totalFlightHours: number;
   matchScore: number;
+  coverageType?: string;
+  recommendationBadge?: string;
   scoreBreakdown: {
     distanceScore: number;
     ratingScore: number;

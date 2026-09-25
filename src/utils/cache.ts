@@ -187,7 +187,7 @@ export const CacheKeyBuilder = {
       const start = query.startDate || "none";
       const end = query.endDate || "none";
       const searchKey = hashSearchQuery(query.search);
-      return `service_requests:list:role=${role}:user=${userId}:p=${page}:l=${limit}:s=${status}:pr=${priority}:stype=${serviceType}:f=${fieldId}:fid=${farmerId}:q=${searchKey}:sb=${sortBy}:so=${sortOrder}:d1=${start}:d2=${end}`;
+      return `service_requests:v2:list:role=${role}:user=${userId}:p=${page}:l=${limit}:s=${status}:pr=${priority}:stype=${serviceType}:f=${fieldId}:fid=${farmerId}:q=${searchKey}:sb=${sortBy}:so=${sortOrder}:d1=${start}:d2=${end}`;
     },
     cursor: (query: ServiceRequestQueryDTO, user?: JwtPayload) => {
       const role = user?.role ? user.role.toLowerCase() : "anonymous";
@@ -203,18 +203,18 @@ export const CacheKeyBuilder = {
       const start = query.startDate || "none";
       const end = query.endDate || "none";
       const searchKey = hashSearchQuery(query.search);
-      return `service_requests:cursor:role=${role}:user=${userId}:c=${cursor}:t=${take}:dir=${direction}:s=${status}:pr=${priority}:stype=${serviceType}:f=${fieldId}:fid=${farmerId}:q=${searchKey}:d1=${start}:d2=${end}`;
+      return `service_requests:v2:cursor:role=${role}:user=${userId}:c=${cursor}:t=${take}:dir=${direction}:s=${status}:pr=${priority}:stype=${serviceType}:f=${fieldId}:fid=${farmerId}:q=${searchKey}:d1=${start}:d2=${end}`;
     },
-    detail: (requestId: number) => `service_requests:detail:${requestId}`,
+    detail: (requestId: number) => `service_requests:v2:detail:${requestId}`,
     metrics: (user?: JwtPayload) => {
       const role = user?.role ? user.role.toLowerCase() : "anonymous";
       const userId = user?.userId || 0;
-      return `service_requests:metrics:role=${role}:user=${userId}`;
+      return `service_requests:v2:metrics:role=${role}:user=${userId}`;
     },
     statusCounts: (user?: JwtPayload) => {
       const role = user?.role ? user.role.toLowerCase() : "anonymous";
       const userId = user?.userId || 0;
-      return `service_requests:counts:role=${role}:user=${userId}`;
+      return `service_requests:v2:counts:role=${role}:user=${userId}`;
     },
   },
 };
@@ -522,10 +522,7 @@ export const CacheInvalidator = {
    */
   async invalidateServiceRequest(requestId?: number): Promise<void> {
     const promises: Promise<unknown>[] = [
-      CacheService.delByPattern("service_requests:list:*"),
-      CacheService.delByPattern("service_requests:cursor:*"),
-      CacheService.delByPattern("service_requests:metrics:*"),
-      CacheService.delByPattern("service_requests:counts:*"),
+      CacheService.delByPattern("service_requests:*"),
     ];
 
     if (requestId) {
