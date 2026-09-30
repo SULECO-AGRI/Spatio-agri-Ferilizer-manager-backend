@@ -1,14 +1,14 @@
 import "dotenv/config";
-import { execSync } from "node:child_process";
-
 import app from "./app";
 import prisma from "./config/prisma";
+import { runPendingMigrations } from "./config/migrate";
 import { getRedisClient, closeRedis } from "./config/redis";
 
 const PORT = process.env.PORT || 5000;
 
 const start = async () => {
-  execSync("npx prisma migrate deploy", { stdio: "inherit" });
+  // Automatically run pending migrations before connecting
+  await runPendingMigrations();
 
   await prisma.$queryRaw`SELECT 1`;
   console.log("Database connected");
