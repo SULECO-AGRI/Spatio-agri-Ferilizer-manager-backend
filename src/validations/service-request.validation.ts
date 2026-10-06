@@ -159,3 +159,37 @@ export const serviceRequestListQuerySchema = z.object({
     .optional()
     .default("desc"),
 });
+
+/**
+ * 6. Query Schema: Estimate Service Request Cost Breakdown
+ */
+export const estimateCostQuerySchema = z.object({
+  fieldId: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine((val) => val === undefined || val > 0, {
+      message: "fieldId must be a positive integer",
+    }),
+  area: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseFloat(val) : undefined))
+    .refine((val) => val === undefined || val > 0, {
+      message: "area must be a positive number",
+    }),
+  cropType: z
+    .string()
+    .max(100, "cropType cannot exceed 100 characters")
+    .optional()
+    .transform((val) => (val ? val.trim() : undefined)),
+  serviceType: z
+    .enum(["FERTILIZING", "PRECISION_SPRAYING", "PEST_CONTROL_SPRAY", "SEED_BROADCASTING"])
+    .optional()
+    .default("FERTILIZING"),
+  priority: z
+    .enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
+    .optional()
+    .default("MEDIUM"),
+});
+

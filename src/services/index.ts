@@ -7,4 +7,5 @@ export * from "./pilot-suggestion.service";
 export * from "./service-request.service";
 export * from "./admin.service";
 export * from "./admin-analytics.service";
+export * from "./cost-estimation.service";
 export * from "./health.service";

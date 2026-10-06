@@ -12,12 +12,25 @@ import {
   serviceRequestListQuerySchema,
   assignPilotSchema,
   updateServiceRequestStatusSchema,
+  estimateCostQuerySchema,
 } from "../validations/service-request.validation";
 
 const router = Router();
 
 // Mount authentication on all service request routes
 router.use(authenticate);
+
+/**
+ * @route   GET /service-requests/estimate-cost
+ * @desc    Get dynamic cost calculation breakdown based on field area, crop type, operation type, and priority
+ * @access  Private (Admin, Farmer, Pilot)
+ */
+router.get(
+  "/estimate-cost",
+  authorize("Admin", "Farmer", "Pilot"),
+  validateQuery(estimateCostQuerySchema),
+  ServiceRequestController.estimateCost
+);
 
 /**
  * @route   POST /service-requests

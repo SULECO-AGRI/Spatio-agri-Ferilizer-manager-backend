@@ -13,6 +13,11 @@ import {
   CandidatePilotsResponseDTO,
 } from "../types/service-request.types";
 import { JwtPayload } from "../types/auth.types";
+import { CostEstimationService } from "./cost-estimation.service";
+import {
+  CostEstimationBreakdown,
+  EstimateCostQueryParams,
+} from "../types/cost-estimation.types";
 import { PilotSuggestionService } from "./pilot-suggestion.service";
 import {
   CacheService,
@@ -80,12 +85,17 @@ export class ServiceRequestService {
       );
     }
 
-    // 2. Calculate estimated cost if not specified (Standard agricultural rate: LKR 2,500/acre)
-    const areaVal = Number(field.area) || 1;
+    // 2. Calculate dynamic estimated cost based on field area, crop type, operation type, and priority
+    const costBreakdown = CostEstimationService.calculateEstimatedCost({
+      area: Number(field.area),
+      cropType: field.cropType,
+      serviceType: dto.serviceType,
+      priority: dto.priority,
+    });
     const estimatedCost =
       dto.estimatedCost !== undefined
         ? dto.estimatedCost
-        : Number((areaVal * 2500).toFixed(2));
+        : costBreakdown.totalEstimatedCost;
 
     // 3. Generate unique request code: REQ-YYYY-XXXXX
     const year = new Date().getFullYear();
@@ -1203,6 +1213,37 @@ export class ServiceRequestService {
       updatedAt: req.updatedAt,
     };
   }
+
+  /**
+   * ESTIMATE COST BREAKDOWN PREVIEW
+   * Calculates a granular cost estimation breakdown for a given field or parameters
+   */
+  public static async estimateCost(
+    params: EstimateCostQueryParams,
+    requestUser?: JwtPayload
+  ): Promise<CostEstimationBreakdown> {
+    let area = params.area;
+    let cropType = params.cropType;
+
+    if (params.fieldId) {
+      const field = await prisma.field.findUnique({
+        where: { id: params.fieldId },
+      });
+
+      if (field) {
+        area = area ?? Number(field.area);
+        cropType = cropType ?? field.cropType;
+      }
+    }
+
+    return CostEstimationService.calculateEstimatedCost({
+      area: area ?? 1.0,
+      cropType: cropType ?? "Paddy",
+      serviceType: params.serviceType,
+      priority: params.priority,
+    });
+  }
 }
+
 
 

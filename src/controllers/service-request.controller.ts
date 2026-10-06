@@ -172,5 +172,25 @@ export class ServiceRequestController {
       );
     }
   );
+
+  /**
+   * GET /service-requests/estimate-cost
+   * Estimate cost breakdown dynamically based on field area, crop type, operation type, and priority
+   */
+  public static estimateCost = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const breakdown = await ServiceRequestService.estimateCost(
+        req.query as any,
+        req.user
+      );
+
+      sendSuccess(
+        res,
+        breakdown,
+        "Estimated cost calculated successfully."
+      );
+    }
+  );
 }
+
 
