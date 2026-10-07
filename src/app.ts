@@ -32,13 +32,18 @@ const defaultOrigins = [
   "http://127.0.0.1:5173",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:4173",
+  "https://spatio-agri-ferilizer-manager-kjrj.vercel.app",
 ];
 
 const envOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
+  ? process.env.ALLOWED_ORIGINS.split(",")
+      .map((origin) => origin.trim().replace(/\/$/, ""))
+      .filter(Boolean)
   : [];
 
-const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
+const allowedOrigins = Array.from(
+  new Set([...defaultOrigins.map((o) => o.replace(/\/$/, "")), ...envOrigins])
+);
 
 app.use(
   cors({
@@ -48,15 +53,22 @@ app.use(
         return callback(null, true);
       }
 
+      const normalizedOrigin = origin.replace(/\/$/, "");
+
       // Allow configured origins
-      if (allowedOrigins.includes(origin)) {
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      // Allow Vercel preview/production deployments matching the project name
+      if (/^https:\/\/spatio-agri-ferilizer-manager.*\.vercel\.app$/.test(normalizedOrigin)) {
         return callback(null, true);
       }
 
       // In development mode, allow any localhost / 127.0.0.1 origin
       if (
         process.env.NODE_ENV !== "production" &&
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)
       ) {
         return callback(null, true);
       }
