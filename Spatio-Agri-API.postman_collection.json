@@ -734,6 +734,24 @@
       "name": "7. Agricultural Fields",
       "item": [
         {
+          "name": "7.0 Get Fields for Authenticated User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/fields/user?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["fields", "user"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Retrieves registered agricultural fields for the authenticated user, extracting the user ID from the JWT auth token."
+          },
+          "response": []
+        },
+        {
           "name": "7.1 List All Fields",
           "request": {
             "method": "GET",

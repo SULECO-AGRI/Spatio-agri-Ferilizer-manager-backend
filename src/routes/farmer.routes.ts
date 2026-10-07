@@ -45,6 +45,18 @@ router.get(
 );
 
 /**
+ * @route   GET /farmers/me/fields
+ * @desc    Get all agricultural fields registered to the authenticated farmer (from JWT token)
+ * @access  Private (Admin or Farmer)
+ */
+router.get(
+  "/me/fields",
+  authorize("Admin", "Farmer"),
+  validateQuery(farmerFieldsQuerySchema),
+  FarmerController.getMyFields
+);
+
+/**
  * @route   GET /farmers/:id/fields
  * @desc    Get all agricultural fields registered to a specific farmer
  * @access  Private (Admin or Respective Farmer)

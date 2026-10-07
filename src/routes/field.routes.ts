@@ -15,28 +15,65 @@ import {
 
 const router = Router();
 
-// Mount authentication and ADMIN authorization on all field routes
+// Mount authentication on all field routes
 router.use(authenticate);
-router.use(authorize("ADMIN"));
+
+/**
+ * @route   GET /api/fields/user
+ * @desc    Get agricultural fields for the authenticated user (userId fetched from auth token)
+ * @access  Private (Admin, Farmer)
+ */
+router.get(
+  "/user",
+  authorize("Admin", "Farmer"),
+  validateQuery(fieldListQuerySchema),
+  FieldController.getMyFields
+);
+
+/**
+ * @route   GET /api/fields/me
+ * @desc    Get agricultural fields for the authenticated user (userId fetched from auth token)
+ * @access  Private (Admin, Farmer)
+ */
+router.get(
+  "/me",
+  authorize("Admin", "Farmer"),
+  validateQuery(fieldListQuerySchema),
+  FieldController.getMyFields
+);
+
+/**
+ * @route   GET /api/fields/my-fields
+ * @desc    Get agricultural fields for the authenticated user (userId fetched from auth token)
+ * @access  Private (Admin, Farmer)
+ */
+router.get(
+  "/my-fields",
+  authorize("Admin", "Farmer"),
+  validateQuery(fieldListQuerySchema),
+  FieldController.getMyFields
+);
 
 /**
  * @route   GET /api/fields
- * @desc    Get paginated directory of fields with search, filters, and sorting
- * @access  Private (Admin Only)
+ * @desc    Get paginated directory of fields with search, filters, and sorting (Admin sees all; Farmers see own)
+ * @access  Private (Admin, Farmer)
  */
 router.get(
   "/",
+  authorize("Admin", "Farmer"),
   validateQuery(fieldListQuerySchema),
   FieldController.getAllFields
 );
 
 /**
  * @route   POST /api/fields
- * @desc    Register a new agricultural field
- * @access  Private (Admin Only)
+ * @desc    Register a new agricultural field (Admin for any farmer, Farmer for own account)
+ * @access  Private (Admin, Farmer)
  */
 router.post(
   "/",
+  authorize("Admin", "Farmer"),
   validateBody(createFieldBodySchema),
   FieldController.createField
 );
@@ -44,10 +81,11 @@ router.post(
 /**
  * @route   GET /api/fields/:id
  * @desc    Get single field details with owner info, stats, and coordinates
- * @access  Private (Admin Only)
+ * @access  Private (Admin or Field Owner Farmer)
  */
 router.get(
   "/:id",
+  authorize("Admin", "Farmer"),
   validateParams(fieldIdParamSchema),
   FieldController.getFieldById
 );
@@ -55,10 +93,11 @@ router.get(
 /**
  * @route   PATCH /api/fields/:id
  * @desc    Update field metadata, acreage, crop type, or coordinates
- * @access  Private (Admin Only)
+ * @access  Private (Admin or Field Owner Farmer)
  */
 router.patch(
   "/:id",
+  authorize("Admin", "Farmer"),
   validateParams(fieldIdParamSchema),
   validateBody(updateFieldBodySchema),
   FieldController.updateField
@@ -67,10 +106,11 @@ router.patch(
 /**
  * @route   DELETE /api/fields/:id
  * @desc    Delete agricultural field (safeguarded against active missions or service requests)
- * @access  Private (Admin Only)
+ * @access  Private (Admin or Field Owner Farmer)
  */
 router.delete(
   "/:id",
+  authorize("Admin", "Farmer"),
   validateParams(fieldIdParamSchema),
   FieldController.deleteField
 );

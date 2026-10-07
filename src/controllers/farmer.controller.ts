@@ -44,6 +44,22 @@ export class FarmerController {
   );
 
   /**
+   * GET /farmers/me/fields
+   * Retrieve registered agricultural fields for the authenticated farmer (from JWT token)
+   */
+  public static getMyFields = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const farmerId = req.user!.userId;
+      const fields = await FarmerService.getFarmerFields(
+        farmerId,
+        req.query as any,
+        req.user
+      );
+      sendSuccess(res, { fields });
+    }
+  );
+
+  /**
    * POST /farmers/:id/fields
    * Register a new agricultural field for a farmer
    */

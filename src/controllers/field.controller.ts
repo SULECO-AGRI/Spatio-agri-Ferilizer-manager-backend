@@ -16,6 +16,17 @@ export class FieldController {
   );
 
   /**
+   * GET /fields/user, /fields/me, /fields/my-fields
+   * List registered agricultural fields for the authenticated user (userId from JWT token)
+   */
+  public static getMyFields = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const result = await FieldService.getMyFields(req.query as any, req.user);
+      sendPaginated(res, "fields", result.fields, result.pagination);
+    }
+  );
+
+  /**
    * GET /fields/:id
    * Get single field detail with coordinates and owner info
    */

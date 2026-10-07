@@ -272,6 +272,29 @@ export class FieldService {
   }
 
   /**
+   * 3.1 GET FIELDS FOR AUTHENTICATED USER
+   * User ID is automatically fetched from the authenticated JWT token payload.
+   * Access: Farmer (fetches own fields) or Admin (can fetch own or specify farmerId)
+   */
+  public static async getMyFields(
+    query: FieldQueryDTO,
+    requestUser?: JwtPayload
+  ): Promise<PaginatedFieldsResponseDTO> {
+    if (!requestUser) {
+      throw AppError.unauthorized("Authentication required.");
+    }
+
+    const isFarmer = requestUser.role.toLowerCase() === "farmer";
+    const targetFarmerId =
+      !isFarmer && query.farmerId ? query.farmerId : requestUser.userId;
+
+    return this.getAllFields(
+      { ...query, farmerId: targetFarmerId },
+      { ...requestUser, role: "farmer", userId: targetFarmerId }
+    );
+  }
+
+  /**
    * 4. CREATE FIELD
    * Access: Admin (for any farmerId) or Farmer (for their own account)
    * Validates target user is a FARMER.
