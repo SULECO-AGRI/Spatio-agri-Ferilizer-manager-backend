@@ -8,4 +8,6 @@ export * from "./service-request.service";
 export * from "./admin.service";
 export * from "./admin-analytics.service";
 export * from "./cost-estimation.service";
+export * from "./fertilizer-cost-estimation.service";
+export * from "./drone-mapping-cost-estimation.service";
 export * from "./health.service";

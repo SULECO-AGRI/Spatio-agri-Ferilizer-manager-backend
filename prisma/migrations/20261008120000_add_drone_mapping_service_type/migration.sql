@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ServiceType" ADD VALUE IF NOT EXISTS 'DRONE_MAPPING';

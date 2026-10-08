@@ -20,8 +20,8 @@ export const createServiceRequestSchema = z.object({
     .int("fieldId must be an integer")
     .positive("fieldId must be a positive integer"),
   serviceType: z
-    .enum(["FERTILIZING"], {
-      message: "serviceType must be 'FERTILIZING'",
+    .enum(["FERTILIZING", "DRONE_MAPPING"], {
+      message: "serviceType must be 'FERTILIZING' or 'DRONE_MAPPING'",
     })
     .default("FERTILIZING"),
   preferredDate: z
@@ -127,7 +127,7 @@ export const serviceRequestListQuerySchema = z.object({
     ])
     .optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
-  serviceType: z.enum(["FERTILIZING"]).optional(),
+  serviceType: z.enum(["FERTILIZING", "DRONE_MAPPING"]).optional(),
   fieldId: z
     .string()
     .optional()
@@ -184,9 +184,26 @@ export const estimateCostQuerySchema = z.object({
     .optional()
     .transform((val) => (val ? val.trim() : undefined)),
   serviceType: z
-    .enum(["FERTILIZING", "PRECISION_SPRAYING", "PEST_CONTROL_SPRAY", "SEED_BROADCASTING"])
+    .enum([
+      "FERTILIZING",
+      "DRONE_MAPPING",
+      "FERTILIZER",
+      "MAPPING",
+      "PRECISION_SPRAYING",
+      "PEST_CONTROL_SPRAY",
+      "SEED_BROADCASTING",
+      "RGB_SURVEY",
+      "MULTISPECTRAL",
+      "THERMAL_MAPPING",
+      "ELEVATION_CONTOUR",
+    ])
     .optional()
     .default("FERTILIZING"),
+  mappingType: z
+    .string()
+    .max(50, "mappingType cannot exceed 50 characters")
+    .optional()
+    .transform((val) => (val ? val.trim() : undefined)),
   priority: z
     .enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
     .optional()

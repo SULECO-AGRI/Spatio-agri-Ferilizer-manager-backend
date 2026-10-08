@@ -28,6 +28,7 @@ enum PilotStatus {
 
 enum ServiceType {
   FERTILIZING
+  DRONE_MAPPING
 }
 
 enum RequestPriority {

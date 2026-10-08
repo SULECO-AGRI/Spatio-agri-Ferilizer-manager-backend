@@ -90,7 +90,7 @@ export const farmerServicesQuerySchema = z.object({
     ])
     .optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
-  serviceType: z.enum(["FERTILIZING"]).optional(),
+  serviceType: z.enum(["FERTILIZING", "DRONE_MAPPING"]).optional(),
   fieldId: z
     .string()
     .optional()

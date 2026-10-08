@@ -11,7 +11,8 @@ export type PriorityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export interface CostEstimationParams {
   area: number; // in acres
   cropType: string;
-  serviceType?: string; // FERTILIZING, etc.
+  serviceType?: string; // FERTILIZING, DRONE_MAPPING, etc.
+  mappingType?: string; // RGB_SURVEY, MULTISPECTRAL, etc.
   priority?: PriorityLevel;
 }
 
@@ -32,6 +33,7 @@ export interface CostEstimationBreakdown {
   totalEstimatedCost: number;
   currency: string;
   breakdownSummary: string;
+  details?: Record<string, any>;
 }
 
 export interface EstimateCostQueryParams {

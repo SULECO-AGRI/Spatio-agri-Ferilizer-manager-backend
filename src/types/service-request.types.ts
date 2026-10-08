@@ -3,7 +3,7 @@ import { PageInfo } from "../utils/pagination";
 
 export interface CreateServiceRequestDTO {
   fieldId: number;
-  serviceType: "FERTILIZING";
+  serviceType: "FERTILIZING" | "DRONE_MAPPING";
   preferredDate: string; // YYYY-MM-DD
   priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   estimatedCost?: number;
@@ -28,7 +28,7 @@ export interface ServiceRequestQueryDTO {
   search?: string;
   status?: "PENDING" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "REJECTED";
   priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  serviceType?: "FERTILIZING";
+  serviceType?: "FERTILIZING" | "DRONE_MAPPING";
   fieldId?: number;
   farmerId?: number;
   startDate?: string;
