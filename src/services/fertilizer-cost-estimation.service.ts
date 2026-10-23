@@ -11,6 +11,7 @@ import {
   CostEstimationBreakdown,
   PriorityLevel,
 } from "../types/cost-estimation.types";
+import { SystemSettingService } from "./system-setting.service";
 
 export class FertilizerCostEstimationService {
   /**
@@ -170,10 +171,15 @@ export class FertilizerCostEstimationService {
     const serviceTypeKey = (params.serviceType || "FERTILIZING").toUpperCase().replace(/\s+/g, "_");
     const priority: PriorityLevel = (params.priority || "MEDIUM").toUpperCase() as PriorityLevel;
 
-    // 1. Determine Base Rate per acre
-    const baseRatePerAcre =
-      this.OPERATION_BASE_RATES[serviceTypeKey] ||
-      this.OPERATION_BASE_RATES.DEFAULT;
+    // 1. Determine Base Rate dynamically from SystemSetting
+    const dynamicSettings = SystemSettingService.getCachedSettingsSync();
+    const dynamicCostPerHa = dynamicSettings.costPerHectare || 6200;
+    const opRates = dynamicSettings.operationRates as Record<string, number> | undefined;
+    const baseRatePerHectare = (opRates && opRates[serviceTypeKey])
+      ? opRates[serviceTypeKey]
+      : dynamicCostPerHa;
+    const baseRatePerAcre = Math.round(baseRatePerHectare / 2.47105);
+    const effectiveMinFee = dynamicSettings.minimumDispatchFee || this.MINIMUM_DISPATCH_FEE;
 
     // 2. Determine Crop Multiplier
     const { category: cropCategory, multiplier: cropMultiplier } =
@@ -198,9 +204,9 @@ export class FertilizerCostEstimationService {
     const rawCalculatedCost = Number(calculatedWithPriority.toFixed(2));
 
     // 6. Apply Minimum Dispatch Fee Guard
-    const isMinimumFeeApplied = rawCalculatedCost < this.MINIMUM_DISPATCH_FEE;
+    const isMinimumFeeApplied = rawCalculatedCost < effectiveMinFee;
     const finalCostValue = isMinimumFeeApplied
-      ? this.MINIMUM_DISPATCH_FEE
+      ? effectiveMinFee
       : rawCalculatedCost;
 
     // Round to nearest 10 LKR for clean invoice pricing
@@ -218,11 +224,13 @@ export class FertilizerCostEstimationService {
       serviceType: "FERTILIZING",
       priority,
       baseRatePerAcre,
+      baseRatePerHectare,
+      pilotCommissionPercentage: dynamicSettings.pilotCommissionPercentage,
       cropMultiplier,
       areaDiscountPercent,
       areaDiscountAmount,
       priorityMultiplier,
-      minimumFee: this.MINIMUM_DISPATCH_FEE,
+      minimumFee: effectiveMinFee,
       isMinimumFeeApplied,
       rawCalculatedCost,
       totalEstimatedCost,

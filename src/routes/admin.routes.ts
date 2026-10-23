@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { AdminController } from "../controllers/admin.controller";
 import { ServiceRequestController } from "../controllers/service-request.controller";
+import { SystemSettingController } from "../controllers/system-setting.controller";
+import { updateSystemSettingsSchema } from "../validations/system-setting.validation";
 import { authenticate, authorize } from "../middlewares/auth.middleware";
 import {
   validateParams,
@@ -84,6 +86,25 @@ router.post(
   validateParams(serviceRequestIdParamSchema),
   validateBody(assignPilotSchema),
   ServiceRequestController.assignPilot
+);
+
+
+/**
+ * @route   GET /admin/settings
+ * @desc    Get dynamic system settings (pilot commission % and cost per hectare)
+ * @access  Private (Admin Only)
+ */
+router.get("/settings", SystemSettingController.getSettings);
+
+/**
+ * @route   PUT /admin/settings
+ * @desc    Update dynamic system settings (pilot commission % and cost per hectare)
+ * @access  Private (Admin Only)
+ */
+router.put(
+  "/settings",
+  validateBody(updateSystemSettingsSchema),
+  SystemSettingController.updateSettings
 );
 
 export default router;

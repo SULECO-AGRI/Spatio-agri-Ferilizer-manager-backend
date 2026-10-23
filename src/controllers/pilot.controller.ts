@@ -61,6 +61,23 @@ export class PilotController {
   );
 
   /**
+   * GET /pilots/:id/missions/:missionId
+   * Retrieve single mission details for pilot
+   */
+  public static getPilotMissionById = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const pilotId = Number(req.params.id);
+      const missionId = Number(req.params.missionId);
+      const mission = await PilotService.getPilotMissionById(
+        pilotId,
+        missionId,
+        req.user
+      );
+      sendSuccess(res, { mission });
+    }
+  );
+
+  /**
    * PATCH /pilots/:id/missions/:missionId/start
    * Start a scheduled mission
    */

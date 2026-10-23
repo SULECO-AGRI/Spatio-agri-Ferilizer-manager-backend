@@ -23,6 +23,8 @@ export interface CostEstimationBreakdown {
   serviceType: string;
   priority: PriorityLevel;
   baseRatePerAcre: number;
+  baseRatePerHectare?: number;
+  pilotCommissionPercentage?: number;
   cropMultiplier: number;
   areaDiscountPercent: number;
   areaDiscountAmount: number;

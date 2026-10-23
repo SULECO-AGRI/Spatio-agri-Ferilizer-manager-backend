@@ -76,6 +76,18 @@ router.get(
 );
 
 /**
+ * @route   GET /pilots/:id/missions/:missionId
+ * @desc    Get single mission details for pilot
+ * @access  Private (Admin or Respective Pilot)
+ */
+router.get(
+  "/:id/missions/:missionId",
+  authorize("Admin", "Pilot"),
+  validateParams(pilotMissionParamsSchema),
+  PilotController.getPilotMissionById
+);
+
+/**
  * @route   PATCH /pilots/:id/missions/:missionId/start
  * @desc    Start scheduled mission execution (transitions to IN_PROGRESS, sets pilot ON_MISSION)
  * @access  Private (Admin or Assigned Pilot)
@@ -112,6 +124,13 @@ router.post(
   validateBody(respondMissionSchema),
   PilotController.respondToMission
 );
+router.patch(
+  "/missions/:missionId/respond",
+  authorize("Admin", "Pilot"),
+  validateParams(missionIdParamSchema),
+  validateBody(respondMissionSchema),
+  PilotController.respondToMission
+);
 
 /**
  * @route   POST /pilots/:id/missions/:missionId/respond
@@ -119,6 +138,13 @@ router.post(
  * @access  Private (Admin or Assigned Pilot)
  */
 router.post(
+  "/:id/missions/:missionId/respond",
+  authorize("Admin", "Pilot"),
+  validateParams(pilotMissionParamsSchema),
+  validateBody(respondMissionSchema),
+  PilotController.respondToMission
+);
+router.patch(
   "/:id/missions/:missionId/respond",
   authorize("Admin", "Pilot"),
   validateParams(pilotMissionParamsSchema),

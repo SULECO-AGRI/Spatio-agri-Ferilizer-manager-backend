@@ -113,6 +113,7 @@ model User {
   pilotProfile     PilotProfile?
   activityLogs     ActivityLog[]
   assignedMissions Mission[]     @relation("MissionAssignedBy")
+  systemSettings   SystemSetting[]
 
   @@index([email])
   @@index([mobile])
@@ -348,4 +349,23 @@ model ActivityLog {
   @@index([entityType, entityId])
   @@index([createdAt(sort: Desc)])
   @@map("activity_logs")
+}
+
+// ==============================================================================
+// 7. SYSTEM SETTINGS (DYNAMIC PRICING & COMMISSIONS)
+// ==============================================================================
+
+model SystemSetting {
+  id          Int      @id @default(autoincrement()) @map("id")
+  key         String   @unique @db.VarChar(100) @map("key")
+  value       String   @db.Text @map("value")
+  description String?  @db.VarChar(255) @map("description")
+  updatedBy   Int?     @map("updated_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  updatedByUser User? @relation(fields: [updatedBy], references: [userId], onDelete: SetNull)
+
+  @@map("system_settings")
 }

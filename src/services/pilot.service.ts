@@ -17,6 +17,7 @@ import { PaginatedResult } from "../types/common.types";
 import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
+import { SystemSettingService } from "./system-setting.service";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import { PilotStatus, MissionStatus, PayoutStatus, RequestStatus } from "../generated/prisma/enums";
 import {
@@ -461,6 +462,7 @@ export class PilotService {
           preferredDate: sr.preferredDate,
           priority: sr.priority,
           status: m.status,
+          estimatedCost: Number(sr.estimatedCost),
           startedAt: m.startedAt,
           completedAt: m.completedAt,
           areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
@@ -509,6 +511,127 @@ export class PilotService {
 
       return { items, pagination };
     });
+  }
+
+  /**
+   * 4b. GET SINGLE MISSION DETAILS FOR PILOT
+   */
+  public static async getPilotMissionById(
+    pilotId: number,
+    missionId: number,
+    requestUser?: JwtPayload
+  ): Promise<PilotMissionItemDTO> {
+    if (requestUser) {
+      this.validatePilotAccess(requestUser, pilotId);
+    }
+    await this.validatePilotExists(pilotId);
+
+    const mission = await prisma.mission.findFirst({
+      where: {
+        missionId,
+        pilotId,
+      },
+      include: {
+        serviceRequest: {
+          include: {
+            field: {
+              include: {
+                farmer: {
+                  include: {
+                    user: {
+                      select: {
+                        userId: true,
+                        firstName: true,
+                        lastName: true,
+                        mobile: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        payment: {
+          select: {
+            paymentId: true,
+            totalAmount: true,
+            pilotEarnings: true,
+            paymentStatus: true,
+            paymentMethod: true,
+            payoutStatus: true,
+          },
+        },
+        review: {
+          select: {
+            reviewId: true,
+            rating: true,
+            comment: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    if (!mission) {
+      throw AppError.notFound(`Mission with ID ${missionId} not found for pilot ${pilotId}.`);
+    }
+
+    const sr = mission.serviceRequest;
+    const field = sr.field;
+    const farmerUser = field.farmer.user;
+
+    return {
+      missionId: mission.missionId,
+      requestId: sr.requestId,
+      requestCode: sr.requestCode,
+      serviceType: sr.serviceType,
+      preferredDate: sr.preferredDate,
+      priority: sr.priority,
+      status: mission.status,
+      estimatedCost: Number(sr.estimatedCost),
+      startedAt: mission.startedAt,
+      completedAt: mission.completedAt,
+      areaSpread: mission.areaSpread ? Number(mission.areaSpread) : null,
+      pilotNotes: mission.pilotNotes,
+      field: {
+        id: field.id,
+        fieldName: field.fieldName,
+        cropType: field.cropType,
+        area: Number(field.area),
+        locationCoordinates: field.locationCoordinates,
+        district: field.district,
+        province: field.province,
+        city: field.city,
+        village: field.village,
+      },
+      farmer: {
+        userId: farmerUser.userId,
+        fullName: `${farmerUser.firstName} ${farmerUser.lastName}`.trim(),
+        mobile: farmerUser.mobile,
+        address: field.farmer.address,
+      },
+      payment: mission.payment
+        ? {
+            paymentId: mission.payment.paymentId,
+            totalAmount: Number(mission.payment.totalAmount),
+            pilotEarnings: Number(mission.payment.pilotEarnings),
+            paymentStatus: mission.payment.paymentStatus,
+            paymentMethod: mission.payment.paymentMethod,
+            payoutStatus: mission.payment.payoutStatus,
+          }
+        : null,
+      review: mission.review
+        ? {
+            reviewId: mission.review.reviewId,
+            rating: mission.review.rating,
+            comment: mission.review.comment,
+            createdAt: mission.review.createdAt,
+          }
+        : null,
+      createdAt: mission.createdAt,
+      updatedAt: mission.updatedAt,
+    };
   }
 
   /**

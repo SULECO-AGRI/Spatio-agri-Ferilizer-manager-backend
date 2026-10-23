@@ -71,6 +71,7 @@ export interface PilotMissionItemDTO {
   preferredDate: Date;
   priority: string;
   status: string;
+  estimatedCost: number;
   startedAt: Date | null;
   completedAt: Date | null;
   areaSpread: number | null;

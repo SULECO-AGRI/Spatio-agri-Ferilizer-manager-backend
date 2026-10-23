@@ -7,6 +7,7 @@ import pilotRoutes from "./pilot.routes";
 import serviceRequestRoutes from "./service-request.routes";
 import adminRoutes from "./admin.routes";
 import adminAnalyticsRoutes from "./admin-analytics.routes";
+import settingsRoutes from "./settings.routes";
 
 const router = Router();
 
@@ -28,6 +29,8 @@ router.use("/admin/analytics", adminAnalyticsRoutes);
 router.use("/api/admin/analytics", adminAnalyticsRoutes);
 router.use("/admin", adminRoutes);
 router.use("/api/admin", adminRoutes);
+router.use("/settings", settingsRoutes);
+router.use("/api/settings", settingsRoutes);
 
 export default router;
 
