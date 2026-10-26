@@ -88,6 +88,7 @@ export class PilotController {
       const result = await PilotService.startMission(
         pilotId,
         missionId,
+        req.body,
         req.user
       );
       sendSuccess(res, result, "Mission started successfully.");

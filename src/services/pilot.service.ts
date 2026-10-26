@@ -640,8 +640,9 @@ export class PilotService {
   public static async startMission(
     pilotId: number,
     missionId: number,
+    body?: any,
     requestUser?: JwtPayload
-  ): Promise<{ missionId: number; status: string; startedAt: Date }> {
+  ): Promise<{ missionId: number; status: string; startedAt?: Date; startRequested?: boolean }> {
     if (requestUser) {
       this.validatePilotAccess(requestUser, pilotId);
     }
@@ -658,6 +659,33 @@ export class PilotService {
 
     if (mission.pilotId !== pilotId) {
       throw AppError.forbidden(`Mission ${missionId} is not assigned to pilot ${pilotId}.`);
+    }
+
+    // Pilot requests start confirmation from farmer
+    if (body?.action === "REQUEST_START" || body?.status === "START_REQUESTED") {
+      const updatedMission = await prisma.mission.update({
+        where: { missionId },
+        data: {
+          pilotNotes: "START_REQUESTED",
+        },
+      });
+
+      logActivity({
+        userId: pilotId,
+        action: "MISSION_START_REQUESTED",
+        entityType: "MISSION",
+        entityId: missionId,
+        details: `Pilot requested start confirmation from farmer for mission ${missionId}.`,
+      });
+
+            await CacheInvalidator.invalidatePilot(pilotId);
+      await CacheInvalidator.invalidateServiceRequest(mission.requestId);
+
+      return {
+        missionId: updatedMission.missionId,
+        status: "START_REQUESTED",
+        startRequested: true,
+      };
     }
 
     if (mission.status !== MissionStatus.SCHEDULED) {

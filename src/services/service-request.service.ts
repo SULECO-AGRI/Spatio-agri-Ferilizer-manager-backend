@@ -913,16 +913,62 @@ export class ServiceRequestService {
 
     const userRole = requestUser.role.toLowerCase();
 
-    // Farmers can only cancel their own PENDING requests
+    // Farmers can cancel PENDING requests OR confirm start of their ASSIGNED requests
     if (userRole === "farmer") {
       if (serviceRequest.field.farmerId !== requestUser.userId) {
         throw AppError.forbidden("Access denied. You can only update your own service requests.");
       }
-      if (dto.status !== RequestStatus.CANCELLED) {
-        throw AppError.forbidden("Farmers are only permitted to cancel pending requests.");
-      }
-      if (serviceRequest.status !== RequestStatus.PENDING) {
-        throw AppError.badRequest("Only PENDING requests can be cancelled by the farmer.");
+      if (dto.status === RequestStatus.IN_PROGRESS) {
+        // Farmer confirms pilot start dispatching
+        const startedAt = new Date();
+        await prisma.$transaction(async (tx) => {
+          await tx.serviceRequest.update({
+            where: { requestId },
+            data: { status: RequestStatus.IN_PROGRESS },
+          });
+
+          const assignedMission = await tx.mission.findFirst({
+            where: { requestId, status: MissionStatus.SCHEDULED },
+          });
+
+          if (assignedMission) {
+            await tx.mission.update({
+              where: { missionId: assignedMission.missionId },
+              data: {
+                status: MissionStatus.IN_PROGRESS,
+                startedAt,
+                pilotNotes: "FARMER_CONFIRMED",
+              },
+            });
+
+            if (assignedMission.pilotId) {
+              await tx.pilotProfile.update({
+                where: { userId: assignedMission.pilotId },
+                data: { status: PilotStatus.ON_MISSION },
+              });
+            }
+          }
+        });
+
+        logActivity({
+          userId: requestUser.userId,
+          action: "REQUEST_FARMER_CONFIRMED_START",
+          entityType: "SERVICE_REQUEST",
+          entityId: requestId,
+          details: `Farmer confirmed mission start for request ${serviceRequest.requestCode}. Status updated to IN_PROGRESS.`,
+        });
+
+        await CacheInvalidator.invalidateServiceRequest(requestId);
+        await CacheInvalidator.invalidateFarmer();
+        await CacheInvalidator.invalidateAdminAnalytics();
+
+        return this.getServiceRequestById(requestId, requestUser);
+      } else if (dto.status === RequestStatus.CANCELLED) {
+        if (serviceRequest.status !== RequestStatus.PENDING) {
+          throw AppError.badRequest("Only PENDING requests can be cancelled by the farmer.");
+        }
+      } else {
+        throw AppError.forbidden("Farmers are only permitted to cancel pending requests or confirm start.");
       }
     }
 
