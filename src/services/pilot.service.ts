@@ -1,3 +1,4 @@
+import { parseNotesHelper } from "./vra-map.service";
 import prisma from "../config/prisma";
 import {
   PilotQueryDTO,
@@ -1059,12 +1060,25 @@ export class PilotService {
     const respondedAt = new Date();
 
     if (dto.action === "ACCEPT") {
-      // Pilot accepts the mission assignment
+      // Pilot accepts the mission assignment: Record structured acceptance metadata in database
+      const existingNotes = parseNotesHelper(mission.pilotNotes);
+      const updatedNotes = JSON.stringify({
+        ...existingNotes,
+        pilotResponse: "ACCEPTED",
+        status: "ACCEPTED",
+        acceptedAt: respondedAt.toISOString(),
+        pilotId: mission.pilotId,
+        pilotName: mission.pilot?.user
+          ? `${mission.pilot.user.firstName} ${mission.pilot.user.lastName}`.trim()
+          : undefined,
+      });
+
       await prisma.$transaction(async (tx) => {
         await tx.mission.update({
           where: { missionId },
           data: {
             status: MissionStatus.SCHEDULED,
+            pilotNotes: updatedNotes,
           },
         });
 
@@ -1093,7 +1107,7 @@ export class PilotService {
         missionId,
         requestId: mission.requestId,
         action: "ACCEPT",
-        missionStatus: MissionStatus.SCHEDULED,
+        missionStatus: "ACCEPTED",
         requestStatus: RequestStatus.ASSIGNED,
         message: "Mission assignment accepted successfully. Proceed to scheduled flight execution.",
         respondedAt,
