@@ -47,6 +47,12 @@ export class VraMapService {
       throw AppError.notFound(`Mission #${missionId} not found.`);
     }
 
+    if (mission.serviceRequest.serviceType === "DRONE_MAPPING") {
+      throw AppError.badRequest(
+        "NDVI to VRA Prescription Map is not required for Drone Mapping missions. It is only required for Fertilizing and Spraying operations."
+      );
+    }
+
     if (mission.pilotId && mission.pilotId !== pilotId) {
       throw AppError.forbidden("You are not the assigned pilot for this mission.");
     }
