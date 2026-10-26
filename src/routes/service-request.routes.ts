@@ -1,3 +1,4 @@
+import { VraMapController } from "../controllers/vra-map.controller";
 import { Router } from "express";
 import { ServiceRequestController } from "../controllers/service-request.controller";
 import { authenticate, authorize } from "../middlewares/auth.middleware";
@@ -127,6 +128,29 @@ router.delete(
   authorize("Admin", "Farmer"),
   validateParams(serviceRequestIdParamSchema),
   ServiceRequestController.deleteServiceRequest
+);
+
+
+/**
+ * @route   POST /service-requests/:id/missions/:missionId/vra-map/upload
+ * @desc    Admin uploads NDVI to VRA Prescription Map for Pilot
+ * @access  Private (Admin Only)
+ */
+router.post(
+  "/:id/missions/:missionId/vra-map/upload",
+  authorize("Admin"),
+  VraMapController.uploadVraMap
+);
+
+/**
+ * @route   GET /service-requests/:id/missions/:missionId/vra-map
+ * @desc    Get NDVI to VRA Prescription Map details
+ * @access  Private (Admin, Pilot)
+ */
+router.get(
+  "/:id/missions/:missionId/vra-map",
+  authorize("Admin", "Pilot"),
+  VraMapController.getVraMap
 );
 
 export default router;

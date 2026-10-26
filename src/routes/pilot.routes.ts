@@ -1,3 +1,4 @@
+import { VraMapController } from "../controllers/vra-map.controller";
 import { Router } from "express";
 import { PilotController } from "../controllers/pilot.controller";
 import { authenticate, authorize } from "../middlewares/auth.middleware";
@@ -189,6 +190,29 @@ router.delete(
   authorize("Admin", "Pilot"),
   validateParams(pilotIdParamSchema),
   PilotController.deletePilot
+);
+
+
+/**
+ * @route   POST /pilots/:id/missions/:missionId/vra-map/request
+ * @desc    Pilot requests NDVI to VRA Map from Admin
+ * @access  Private (Admin or Assigned Pilot)
+ */
+router.post(
+  "/:id/missions/:missionId/vra-map/request",
+  authorize("Admin", "Pilot"),
+  VraMapController.requestVraMap
+);
+
+/**
+ * @route   GET /pilots/:id/missions/:missionId/vra-map
+ * @desc    Get NDVI to VRA Map for mission
+ * @access  Private (Admin or Assigned Pilot)
+ */
+router.get(
+  "/:id/missions/:missionId/vra-map",
+  authorize("Admin", "Pilot"),
+  VraMapController.getVraMap
 );
 
 export default router;

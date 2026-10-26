@@ -1,3 +1,4 @@
+import { parseNotesHelper } from "./vra-map.service";
 import prisma from "../config/prisma";
 import {
   CreateServiceRequestDTO,
@@ -1254,6 +1255,8 @@ export class ServiceRequestService {
             status: latestMission.status,
             startedAt: latestMission.startedAt,
             completedAt: latestMission.completedAt,
+            pilotNotes: latestMission.pilotNotes,
+            vra: parseNotesHelper(latestMission.pilotNotes).vra || null,
           }
         : null,
       createdAt: req.createdAt,

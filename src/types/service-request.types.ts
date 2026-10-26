@@ -85,6 +85,8 @@ export interface ServiceRequestListItemDTO {
     status: string;
     startedAt: Date | null;
     completedAt: Date | null;
+    pilotNotes?: string | null;
+    vra?: any;
   } | null;
   createdAt: Date;
   updatedAt: Date;
