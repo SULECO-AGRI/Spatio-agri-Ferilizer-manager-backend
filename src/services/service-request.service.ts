@@ -515,6 +515,7 @@ export class ServiceRequestService {
             },
           },
           missions: {
+            orderBy: { missionId: "desc" },
             include: {
               pilot: {
                 include: {
@@ -616,6 +617,7 @@ export class ServiceRequestService {
               },
             },
             missions: {
+              orderBy: { missionId: "desc" },
               include: {
                 assignedByUser: {
                   select: {
@@ -771,7 +773,7 @@ export class ServiceRequestService {
     // 1. Verify service request exists and is strictly in PENDING state
     const serviceRequest = await prisma.serviceRequest.findUnique({
       where: { requestId },
-      include: { missions: true },
+      include: { missions: { orderBy: { missionId: "desc" } } },
     });
 
     if (!serviceRequest) {
@@ -838,6 +840,23 @@ export class ServiceRequestService {
     await prisma.$transaction(async (tx) => {
       const existingMission = serviceRequest.missions[0];
 
+      // Parse any existing VRA data from pilotNotes so we don't lose prescription data,
+      // but clear stale pilot rejection/acceptance notes on reassignment
+      let cleanNotes: string | null = null;
+      if (dto.pilotNotes) {
+        cleanNotes = dto.pilotNotes;
+      } else if (existingMission?.pilotNotes) {
+        try {
+          const parsed = JSON.parse(existingMission.pilotNotes);
+          if (parsed && typeof parsed === "object" && parsed.vra) {
+            cleanNotes = JSON.stringify({ vra: parsed.vra });
+          }
+        } catch {
+          // Plain text like "Pilot Rejected: ...", discard
+          cleanNotes = null;
+        }
+      }
+
       if (existingMission) {
         // Reassign existing mission
         await tx.mission.update({
@@ -846,7 +865,9 @@ export class ServiceRequestService {
             pilotId: dto.pilotId,
             assignedBy: adminUserId,
             status: MissionStatus.SCHEDULED,
-            pilotNotes: dto.pilotNotes || existingMission.pilotNotes,
+            pilotNotes: cleanNotes,
+            startedAt: null,
+            completedAt: null,
           },
         });
       } else {
@@ -857,7 +878,7 @@ export class ServiceRequestService {
             pilotId: dto.pilotId,
             assignedBy: adminUserId,
             status: MissionStatus.SCHEDULED,
-            pilotNotes: dto.pilotNotes || null,
+            pilotNotes: cleanNotes,
           },
         });
       }
@@ -1209,7 +1230,8 @@ export class ServiceRequestService {
    */
   private static mapToListItemDTO(req: any): ServiceRequestListItemDTO {
     const farmerUser = req.field.farmer.user;
-    const latestMission = req.missions?.[0] || null;
+    const sortedMissions = req.missions ? [...req.missions].sort((a: any, b: any) => b.missionId - a.missionId) : [];
+    const latestMission = sortedMissions[0] || null;
     const assignedPilot =
       latestMission && latestMission.pilot
         ? {
