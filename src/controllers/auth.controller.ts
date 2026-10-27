@@ -48,4 +48,23 @@ export class AuthController {
       sendSuccess(res, user);
     }
   );
+  /**
+   * POST /auth/refresh
+   */
+  public static refreshToken = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const result = await AuthService.refreshToken(req.body);
+      sendSuccess(res, result, "Token refreshed successfully.");
+    }
+  );
+
+  /**
+   * POST /auth/logout
+   */
+  public static logout = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      await AuthService.logout(req.body?.refreshToken);
+      sendSuccess(res, null, "Logged out successfully.");
+    }
+  );
 }

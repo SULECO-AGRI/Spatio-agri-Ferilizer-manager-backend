@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyToken } from "../utils/jwt";
+import jwt from "jsonwebtoken";
+import { verifyAccessToken } from "../utils/jwt";
 import { AppError } from "../utils/AppError";
 
 export const authenticate = (
@@ -11,18 +12,23 @@ export const authenticate = (
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return next(
-      AppError.unauthorized("Authorization token is missing or malformed.")
+      AppError.unauthorized("Authorization token is missing or malformed.", "TOKEN_MISSING")
     );
   }
 
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = verifyToken(token);
+    const decoded = verifyAccessToken(token);
     req.user = decoded;
     next();
   } catch (error) {
-    return next(AppError.unauthorized("Invalid or expired token."));
+    if (error instanceof jwt.TokenExpiredError) {
+      return next(
+        AppError.unauthorized("Token expired. Please refresh your session.", "TOKEN_EXPIRED")
+      );
+    }
+    return next(AppError.unauthorized("Invalid or expired token.", "TOKEN_INVALID"));
   }
 };
 

@@ -21,6 +21,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     status: statusCode >= 500 ? "error" : "fail",
     message: errorMessage,
+    ...(err.code ? { code: err.code } : {}),
     ...(isProduction ? {} : { stack: err.stack }),
   });
 };

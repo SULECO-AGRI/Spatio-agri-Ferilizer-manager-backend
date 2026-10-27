@@ -79,4 +79,15 @@ export interface AuthUserResponse {
 export interface AuthResponse {
   user: AuthUserResponse;
   token: string;
+  refreshToken?: string;
 }
+
+export interface RefreshTokenDTO {
+  refreshToken: string;
+}
+
+export interface RefreshResponse {
+  token: string;
+  refreshToken: string;
+}
+

@@ -7,11 +7,18 @@ import {
   AuthResponse,
   AuthUserResponse,
   ProfileData,
+  RefreshTokenDTO,
+  RefreshResponse,
 } from "../types/auth.types";
-import { generateToken } from "../utils/jwt";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  generateToken,
+} from "../utils/jwt";
 import { AppError } from "../utils/AppError";
 import { hashPassword, comparePassword } from "../utils/password";
-import { CacheInvalidator } from "../utils/cache";
+import { CacheInvalidator, CacheService } from "../utils/cache";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -361,5 +368,100 @@ export class AuthService {
     }
 
     return this.formatUserResponse(user);
+  }
+  private static inMemoryRefreshTokens = new Set<string>();
+
+  private static async storeRefreshToken(userId: number, token: string): Promise<void> {
+    this.inMemoryRefreshTokens.add(token);
+    try {
+      await CacheService.set(`auth:refresh:${token}`, String(userId), 7 * 24 * 60 * 60);
+    } catch (err) {
+      console.warn("[AuthService] Warning storing refresh token in cache:", err);
+    }
+  }
+
+  private static async isRefreshTokenActive(token: string): Promise<boolean> {
+    if (this.inMemoryRefreshTokens.has(token)) {
+      return true;
+    }
+    try {
+      const val = await CacheService.get<string>(`auth:refresh:${token}`);
+      return Boolean(val);
+    } catch (err) {
+      console.warn("[AuthService] Warning checking refresh token in cache:", err);
+    }
+    return false;
+  }
+
+  private static async revokeRefreshToken(token: string): Promise<void> {
+    this.inMemoryRefreshTokens.delete(token);
+    try {
+      await CacheService.del(`auth:refresh:${token}`);
+    } catch (err) {
+      console.warn("[AuthService] Warning revoking refresh token in cache:", err);
+    }
+  }
+
+  /**
+   * Refreshes access token and rotates refresh token
+   */
+  public static async refreshToken(dto: RefreshTokenDTO): Promise<RefreshResponse> {
+    const { refreshToken } = dto;
+    if (!refreshToken) {
+      throw AppError.badRequest("Refresh token is required.");
+    }
+
+    let decoded: any;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch (err) {
+      await this.revokeRefreshToken(refreshToken);
+      throw AppError.unauthorized("Refresh token expired or invalid. Please sign in again.", "REFRESH_TOKEN_EXPIRED");
+    }
+
+    const isActive = await this.isRefreshTokenActive(refreshToken);
+    if (!isActive) {
+      throw AppError.unauthorized("Refresh token has been revoked or is invalid.", "REFRESH_TOKEN_REVOKED");
+    }
+
+    // Revoke old refresh token for Token Rotation security
+    await this.revokeRefreshToken(refreshToken);
+
+    const user = await prisma.user.findUnique({
+      where: { userId: decoded.userId },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw AppError.unauthorized("User account no longer exists.", "USER_NOT_FOUND");
+    }
+
+    const newAccessToken = generateAccessToken({
+      userId: user.userId,
+      email: user.email,
+      role: user.role.name,
+    });
+
+    const newRefreshToken = generateRefreshToken({
+      userId: user.userId,
+      email: user.email,
+      role: user.role.name,
+    });
+
+    await this.storeRefreshToken(user.userId, newRefreshToken);
+
+    return {
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
+  }
+
+  /**
+   * Invalidate refresh token on logout
+   */
+  public static async logout(refreshToken?: string): Promise<void> {
+    if (refreshToken) {
+      await this.revokeRefreshToken(refreshToken);
+    }
   }
 }

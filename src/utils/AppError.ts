@@ -1,11 +1,13 @@
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly isOperational: boolean;
+  public readonly code?: string;
 
-  constructor(message: string, statusCode: number = 500) {
+  constructor(message: string, statusCode: number = 500, code?: string) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
+    this.code = code;
 
     Object.setPrototypeOf(this, new.target.prototype);
     Error.captureStackTrace(this, this.constructor);
@@ -15,8 +17,8 @@ export class AppError extends Error {
     return new AppError(message, 400);
   }
 
-  public static unauthorized(message: string = "Unauthorized access."): AppError {
-    return new AppError(message, 401);
+  public static unauthorized(message: string = "Unauthorized access.", code?: string): AppError {
+    return new AppError(message, 401, code);
   }
 
   public static forbidden(message: string = "Forbidden access."): AppError {
