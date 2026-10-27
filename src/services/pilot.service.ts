@@ -454,6 +454,17 @@ export class PilotService {
         const sr = m.serviceRequest;
         const field = sr.field;
         const farmerUser = field.farmer.user;
+        const parsedNotes = parseNotesHelper(m.pilotNotes);
+        const flightDurationHours = parsedNotes.flightDurationHours
+          ? Number(parsedNotes.flightDurationHours)
+          : m.completedAt && m.startedAt
+          ? Math.round(((m.completedAt.getTime() - m.startedAt.getTime()) / 3600000) * 10) / 10
+          : (m.status === "COMPLETED" ? 1.0 : null);
+        const areaSpread = m.areaSpread
+          ? Number(m.areaSpread)
+          : parsedNotes.areaSpread
+          ? Number(parsedNotes.areaSpread)
+          : null;
 
         return {
           missionId: m.missionId,
@@ -466,7 +477,8 @@ export class PilotService {
           estimatedCost: Number(sr.estimatedCost),
           startedAt: m.startedAt,
           completedAt: m.completedAt,
-          areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
+          areaSpread,
+          flightDurationHours,
           pilotNotes: m.pilotNotes,
           field: {
             id: field.id,
@@ -581,6 +593,17 @@ export class PilotService {
     const sr = mission.serviceRequest;
     const field = sr.field;
     const farmerUser = field.farmer.user;
+    const parsedNotes = parseNotesHelper(mission.pilotNotes);
+    const flightDurationHours = parsedNotes.flightDurationHours
+      ? Number(parsedNotes.flightDurationHours)
+      : mission.completedAt && mission.startedAt
+      ? Math.round(((mission.completedAt.getTime() - mission.startedAt.getTime()) / 3600000) * 10) / 10
+      : (mission.status === "COMPLETED" ? 1.0 : null);
+    const areaSpread = mission.areaSpread
+      ? Number(mission.areaSpread)
+      : parsedNotes.areaSpread
+      ? Number(parsedNotes.areaSpread)
+      : null;
 
     return {
       missionId: mission.missionId,
@@ -593,7 +616,8 @@ export class PilotService {
       estimatedCost: Number(sr.estimatedCost),
       startedAt: mission.startedAt,
       completedAt: mission.completedAt,
-      areaSpread: mission.areaSpread ? Number(mission.areaSpread) : null,
+      areaSpread,
+      flightDurationHours,
       pilotNotes: mission.pilotNotes,
       field: {
         id: field.id,
@@ -920,7 +944,7 @@ export class PilotService {
         whereClause.status = query.status as PayoutStatus;
       }
 
-      const [total, payouts, payoutGroups] = await Promise.all([
+      const [totalPayouts, payouts, payoutGroups, missionPayments, completedFlightsCount] = await Promise.all([
         prisma.payout.count({ where: whereClause }),
         prisma.payout.findMany({
           where: whereClause,
@@ -933,6 +957,31 @@ export class PilotService {
           where: { pilotId },
           _sum: { amount: true },
         }),
+        prisma.payment.findMany({
+          where: {
+            mission: {
+              pilotId,
+            },
+          },
+          include: {
+            mission: {
+              include: {
+                serviceRequest: {
+                  select: {
+                    requestCode: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.mission.count({
+          where: {
+            pilotId,
+            status: MissionStatus.COMPLETED,
+          },
+        }),
       ]);
 
       let totalSettled = 0;
@@ -941,12 +990,25 @@ export class PilotService {
 
       for (const g of payoutGroups) {
         const amt = Number(g._sum.amount || 0);
-        if (g.status === PayoutStatus.SETTLED) totalSettled = amt;
-        if (g.status === PayoutStatus.PENDING) totalPending = amt;
-        if (g.status === PayoutStatus.PROCESSING) totalProcessing = amt;
+        if (g.status === PayoutStatus.SETTLED) totalSettled += amt;
+        if (g.status === PayoutStatus.PENDING) totalPending += amt;
+        if (g.status === PayoutStatus.PROCESSING) totalProcessing += amt;
       }
 
-      const items = payouts.map((p) => ({
+      // Add mission payments to pending and settled totals
+      for (const mp of missionPayments) {
+        const earnings = Number(mp.pilotEarnings || 0);
+        if (mp.payoutStatus === "SETTLED") {
+          if (!mp.payoutId) {
+            totalSettled += earnings;
+          }
+        } else {
+          totalPending += earnings;
+        }
+      }
+
+      // Format formal bank payouts
+      let items: any[] = payouts.map((p) => ({
         payoutId: p.payoutId,
         pilotId: p.pilotId,
         periodStart: p.periodStart,
@@ -960,14 +1022,45 @@ export class PilotService {
         createdAt: p.createdAt,
       }));
 
-      const pagination = buildPaginationMeta(total, page, limit);
+      // Include unbundled mission payments in disbursement ledger
+      const unbundledPayments = missionPayments.filter((p) => !p.payoutId);
+      if (unbundledPayments.length > 0) {
+        const paymentItems = unbundledPayments.map((p) => ({
+          payoutId: p.paymentId,
+          pilotId,
+          periodStart: p.createdAt,
+          periodEnd: p.createdAt,
+          amount: Number(p.pilotEarnings),
+          bankName: "Direct Agri Escrow",
+          bankAccountNo: "N/A",
+          transactionRef: p.mission?.serviceRequest?.requestCode || `PAYMENT-#${p.paymentId}`,
+          status: p.payoutStatus === "SETTLED" ? "SETTLED" : "PENDING",
+          settledAt: p.paidAt || null,
+          createdAt: p.createdAt,
+          requestCode: p.mission?.serviceRequest?.requestCode || `PAYMENT-#${p.paymentId}`,
+          missionId: p.missionId,
+          totalFarmerPayment: Number(p.totalAmount),
+        }));
+
+        const existingIds = new Set(items.map((i) => i.payoutId));
+        for (const pi of paymentItems) {
+          if (!existingIds.has(pi.payoutId)) {
+            items.push(pi);
+          }
+        }
+        items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+
+      const totalCount = Math.max(totalPayouts, items.length);
+      const pagination = buildPaginationMeta(totalCount, page, limit);
 
       return {
-        payouts: items,
+        payouts: items.slice(skip, skip + limit),
         summary: {
           totalSettled: Number(totalSettled.toFixed(2)),
           totalPending: Number(totalPending.toFixed(2)),
           totalProcessing: Number(totalProcessing.toFixed(2)),
+          completedFlights: completedFlightsCount,
         },
         pagination,
       };

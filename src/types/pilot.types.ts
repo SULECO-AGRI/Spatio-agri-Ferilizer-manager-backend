@@ -76,6 +76,7 @@ export interface PilotMissionItemDTO {
   completedAt: Date | null;
   areaSpread: number | null;
   pilotNotes: string | null;
+  flightDurationHours?: number | null;
   field: {
     id: number;
     fieldName: string;

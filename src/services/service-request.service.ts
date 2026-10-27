@@ -337,6 +337,7 @@ export class ServiceRequestService {
                       },
                     },
                   },
+                  payment: true,
                 },
               },
             },
@@ -1387,6 +1388,16 @@ export class ServiceRequestService {
               parseNotesHelper(latestMission.pilotNotes).dispatchStatus === "COMPLETE_REQUESTED"
             ),
             vra: parseNotesHelper(latestMission.pilotNotes).vra || null,
+            payment: latestMission.payment
+              ? {
+                  paymentId: latestMission.payment.paymentId,
+                  totalAmount: Number(latestMission.payment.totalAmount),
+                  companyCommission: Number(latestMission.payment.companyCommission),
+                  pilotEarnings: Number(latestMission.payment.pilotEarnings),
+                  paymentStatus: latestMission.payment.paymentStatus,
+                  payoutStatus: latestMission.payment.payoutStatus,
+                }
+              : null,
           }
         : null,
       createdAt: req.createdAt,

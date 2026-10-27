@@ -89,6 +89,14 @@ export interface ServiceRequestListItemDTO {
     startRequested?: boolean;
     completeRequested?: boolean;
     vra?: any;
+    payment?: {
+      paymentId: number;
+      totalAmount: number;
+      companyCommission: number;
+      pilotEarnings: number;
+      paymentStatus: string;
+      payoutStatus: string;
+    } | null;
   } | null;
   createdAt: Date;
   updatedAt: Date;
