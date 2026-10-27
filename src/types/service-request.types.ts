@@ -86,6 +86,8 @@ export interface ServiceRequestListItemDTO {
     startedAt: Date | null;
     completedAt: Date | null;
     pilotNotes?: string | null;
+    startRequested?: boolean;
+    completeRequested?: boolean;
     vra?: any;
   } | null;
   createdAt: Date;
@@ -128,6 +130,8 @@ export interface ServiceRequestDetailDTO {
     completedAt: Date | null;
     areaSpread: number | null;
     pilotNotes: string | null;
+    startRequested?: boolean;
+    completeRequested?: boolean;
     assignedBy: {
       userId: number;
       fullName: string;

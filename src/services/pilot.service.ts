@@ -664,10 +664,15 @@ export class PilotService {
 
     // Pilot requests start confirmation from farmer
     if (body?.action === "REQUEST_START" || body?.status === "START_REQUESTED") {
+      const currentNotes = parseNotesHelper(mission.pilotNotes);
+      currentNotes.dispatchStatus = "START_REQUESTED";
+      currentNotes.startRequested = true;
+      currentNotes.startRequestedAt = new Date().toISOString();
+
       const updatedMission = await prisma.mission.update({
         where: { missionId },
         data: {
-          pilotNotes: "START_REQUESTED",
+          pilotNotes: JSON.stringify(currentNotes),
         },
       });
 
@@ -679,8 +684,10 @@ export class PilotService {
         details: `Pilot requested start confirmation from farmer for mission ${missionId}.`,
       });
 
-            await CacheInvalidator.invalidatePilot(pilotId);
+      await CacheInvalidator.invalidatePilot(pilotId);
       await CacheInvalidator.invalidateServiceRequest(mission.requestId);
+      await CacheInvalidator.invalidateFarmer();
+      await CacheInvalidator.invalidateAdminAnalytics();
 
       return {
         missionId: updatedMission.missionId,
@@ -782,6 +789,49 @@ export class PilotService {
       throw AppError.badRequest(
         `Cannot complete mission. Current status is '${mission.status}'.`
       );
+    }
+
+    // Pilot requests completion confirmation from farmer
+    const isPilotRole = requestUser?.role?.toLowerCase() === "pilot";
+    const isReqComplete = (dto as any)?.action === "REQUEST_COMPLETE" || (dto as any)?.status === "COMPLETE_REQUESTED";
+    if (isPilotRole || isReqComplete) {
+      const currentNotes = parseNotesHelper(mission.pilotNotes);
+      currentNotes.dispatchStatus = "COMPLETE_REQUESTED";
+      currentNotes.completeRequested = true;
+      currentNotes.flightDurationHours = dto.flightDurationHours;
+      currentNotes.areaSpread = dto.areaSpread;
+      currentNotes.pilotNotes = dto.pilotNotes || "";
+      currentNotes.completeRequestedAt = new Date().toISOString();
+
+      const updatedMission = await prisma.mission.update({
+        where: { missionId },
+        data: {
+          areaSpread: dto.areaSpread,
+          pilotNotes: JSON.stringify(currentNotes),
+        },
+      });
+
+      logActivity({
+        userId: pilotId,
+        action: "MISSION_COMPLETE_REQUESTED",
+        entityType: "MISSION",
+        entityId: missionId,
+        details: `Pilot submitted completion for mission #${missionId}. Waiting for farmer confirmation.`,
+      });
+
+      await CacheInvalidator.invalidatePilot(pilotId);
+      await CacheInvalidator.invalidateServiceRequest(mission.requestId);
+      await CacheInvalidator.invalidateFarmer();
+      await CacheInvalidator.invalidateAdminAnalytics();
+
+      return {
+        missionId: updatedMission.missionId,
+        status: "COMPLETE_REQUESTED",
+        completeRequested: true,
+        completedAt: new Date(),
+        areaSpread: Number(dto.areaSpread),
+        totalFlightHours: Number(dto.flightDurationHours),
+      } as any;
     }
 
     const completedAt = new Date();

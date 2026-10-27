@@ -688,6 +688,14 @@ export class ServiceRequestService {
             completedAt: m.completedAt,
             areaSpread: m.areaSpread ? Number(m.areaSpread) : null,
             pilotNotes: m.pilotNotes,
+            startRequested: Boolean(
+              m.pilotNotes?.includes("START_REQUESTED") ||
+              parseNotesHelper(m.pilotNotes).dispatchStatus === "START_REQUESTED"
+            ),
+            completeRequested: Boolean(
+              m.pilotNotes?.includes("COMPLETE_REQUESTED") ||
+              parseNotesHelper(m.pilotNotes).dispatchStatus === "COMPLETE_REQUESTED"
+            ),
             assignedBy: m.assignedByUser
               ? {
                   userId: m.assignedByUser.userId,
@@ -985,12 +993,104 @@ export class ServiceRequestService {
         await CacheInvalidator.invalidateAdminAnalytics();
 
         return this.getServiceRequestById(requestId, requestUser);
+      } else if (dto.status === RequestStatus.COMPLETED) {
+        // Farmer confirms mission completion
+        if (serviceRequest.status !== RequestStatus.IN_PROGRESS) {
+          throw AppError.badRequest("Only IN_PROGRESS requests can be confirmed as completed.");
+        }
+
+        const assignedMission = await prisma.mission.findFirst({
+          where: { requestId, status: MissionStatus.IN_PROGRESS },
+        });
+
+        if (!assignedMission) {
+          throw AppError.notFound("No active mission found to complete for this service request.");
+        }
+
+        const currentNotes = parseNotesHelper(assignedMission.pilotNotes);
+        const flightHours = Number(currentNotes.flightDurationHours || 1.0);
+        const spreadArea = currentNotes.areaSpread ? Number(currentNotes.areaSpread) : (assignedMission.areaSpread ? Number(assignedMission.areaSpread) : Number(serviceRequest.field.area));
+        const completedAt = new Date();
+
+        currentNotes.dispatchStatus = "COMPLETED";
+        currentNotes.completeRequested = false;
+        currentNotes.farmerConfirmedCompletedAt = completedAt.toISOString();
+
+        await prisma.$transaction(async (tx) => {
+          // 1. Complete service request
+          await tx.serviceRequest.update({
+            where: { requestId },
+            data: { status: RequestStatus.COMPLETED },
+          });
+
+          // 2. Complete mission
+          await tx.mission.update({
+            where: { missionId: assignedMission.missionId },
+            data: {
+              status: MissionStatus.COMPLETED,
+              completedAt,
+              areaSpread: spreadArea,
+              pilotNotes: JSON.stringify(currentNotes),
+            },
+          });
+
+          // 3. Update pilot profile back to ACTIVE and increment metrics
+          if (assignedMission.pilotId) {
+            await tx.pilotProfile.update({
+              where: { userId: assignedMission.pilotId },
+              data: {
+                status: PilotStatus.ACTIVE,
+                completedMissions: { increment: 1 },
+                totalFlightHours: { increment: flightHours },
+              },
+            });
+          }
+
+          // 4. Ensure payment record exists for this mission
+          const existingPayment = await tx.payment.findUnique({
+            where: { missionId: assignedMission.missionId },
+          });
+
+          if (!existingPayment) {
+            const total = Number(serviceRequest.estimatedCost);
+            const commission = Math.round(total * 0.30 * 100) / 100;
+            const earnings = Math.round(total * 0.70 * 100) / 100;
+            await tx.payment.create({
+              data: {
+                missionId: assignedMission.missionId,
+                totalAmount: total,
+                companyCommission: commission,
+                pilotEarnings: earnings,
+                paymentMethod: "CARD_GATEWAY",
+                paymentStatus: "PENDING",
+                payoutStatus: "UNSETTLED",
+              },
+            });
+          }
+        });
+
+        logActivity({
+          userId: requestUser.userId,
+          action: "REQUEST_FARMER_CONFIRMED_COMPLETION",
+          entityType: "SERVICE_REQUEST",
+          entityId: requestId,
+          details: `Farmer confirmed mission completion for request ${serviceRequest.requestCode}. Status updated to COMPLETED.`,
+        });
+
+        await CacheInvalidator.invalidateServiceRequest(requestId);
+        if (assignedMission.pilotId) {
+          await CacheInvalidator.invalidatePilot(assignedMission.pilotId);
+        }
+        await CacheInvalidator.invalidateFarmer();
+        await CacheInvalidator.invalidateAdminAnalytics();
+
+        return this.getServiceRequestById(requestId, requestUser);
       } else if (dto.status === RequestStatus.CANCELLED) {
         if (serviceRequest.status !== RequestStatus.PENDING) {
           throw AppError.badRequest("Only PENDING requests can be cancelled by the farmer.");
         }
       } else {
-        throw AppError.forbidden("Farmers are only permitted to cancel pending requests or confirm start.");
+        throw AppError.forbidden("Farmers are only permitted to cancel pending requests, confirm start, or confirm completion.");
       }
     }
 
@@ -1278,6 +1378,14 @@ export class ServiceRequestService {
             startedAt: latestMission.startedAt,
             completedAt: latestMission.completedAt,
             pilotNotes: latestMission.pilotNotes,
+            startRequested: Boolean(
+              latestMission.pilotNotes?.includes("START_REQUESTED") ||
+              parseNotesHelper(latestMission.pilotNotes).dispatchStatus === "START_REQUESTED"
+            ),
+            completeRequested: Boolean(
+              latestMission.pilotNotes?.includes("COMPLETE_REQUESTED") ||
+              parseNotesHelper(latestMission.pilotNotes).dispatchStatus === "COMPLETE_REQUESTED"
+            ),
             vra: parseNotesHelper(latestMission.pilotNotes).vra || null,
           }
         : null,
