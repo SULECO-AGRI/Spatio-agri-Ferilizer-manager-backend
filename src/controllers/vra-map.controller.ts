@@ -23,11 +23,11 @@ export class VraMapController {
     try {
       const missionId = Number(req.params.missionId);
       const adminUserId = (req as any).user?.userId;
-      const { fileName, fileType, fileData, fileUrl, adminNotes } = req.body || {};
+      const { fileName, fileType, fileData, fileUrl, deliveryType, adminNotes } = req.body || {};
 
       const result = await VraMapService.uploadVraMap(
         missionId,
-        { fileName, fileType, fileData, fileUrl, adminNotes },
+        { fileName, fileType, fileData, fileUrl, deliveryType, adminNotes },
         adminUserId
       );
 
