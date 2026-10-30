@@ -19,6 +19,7 @@ import { JwtPayload } from "../types/auth.types";
 import { AppError } from "../utils/AppError";
 import { logActivity } from "../utils/activityLogger";
 import { SystemSettingService } from "./system-setting.service";
+import { CostEstimationService } from "./cost-estimation.service";
 import { getPaginationOffsets, buildPaginationMeta } from "../utils/pagination";
 import { PilotStatus, MissionStatus, PayoutStatus, RequestStatus } from "../generated/prisma/enums";
 import {
@@ -497,16 +498,52 @@ export class PilotService {
             mobile: farmerUser.mobile,
             address: field.farmer.address,
           },
-          payment: m.payment
-            ? {
-                paymentId: m.payment.paymentId,
-                totalAmount: Number(m.payment.totalAmount),
-                pilotEarnings: Number(m.payment.pilotEarnings),
-                paymentStatus: m.payment.paymentStatus,
-                paymentMethod: m.payment.paymentMethod,
-                payoutStatus: m.payment.payoutStatus,
-              }
-            : null,
+                    payment: (() => {
+            const dynamicSettings = SystemSettingService.getCachedSettingsSync();
+            const pilotCommissionPct = dynamicSettings.pilotCommissionPercentage || 70;
+            const totalAmount = m.payment ? Number(m.payment.totalAmount) : Number(sr.estimatedCost);
+            const pilotEarnings = m.payment
+              ? Number(m.payment.pilotEarnings)
+              : Math.round(totalAmount * (pilotCommissionPct / 100) * 100) / 100;
+            const companyCommission = m.payment
+              ? Number((m.payment as any).companyCommission || (totalAmount - pilotEarnings))
+              : Math.round((totalAmount - pilotEarnings) * 100) / 100;
+            return {
+              paymentId: m.payment ? m.payment.paymentId : 0,
+              totalAmount,
+              pilotEarnings,
+              companyCommission,
+              pilotCommissionPercentage: pilotCommissionPct,
+              paymentStatus: m.payment ? m.payment.paymentStatus : "PENDING",
+              paymentMethod: m.payment ? m.payment.paymentMethod : "CARD_GATEWAY",
+              payoutStatus: m.payment ? m.payment.payoutStatus : "UNSETTLED",
+            };
+          })(),
+          costBreakdown: (() => {
+            const dynamicSettings = SystemSettingService.getCachedSettingsSync();
+            const pilotCommissionPct = dynamicSettings.pilotCommissionPercentage || 70;
+            const costEst = CostEstimationService.calculateEstimatedCost({
+              area: Number(field.area),
+              cropType: field.cropType,
+              serviceType: sr.serviceType,
+              priority: sr.priority as any,
+            });
+            const totalAmount = m.payment ? Number(m.payment.totalAmount) : Number(sr.estimatedCost);
+            const pilotEarnings = m.payment
+              ? Number(m.payment.pilotEarnings)
+              : Math.round(totalAmount * (pilotCommissionPct / 100) * 100) / 100;
+            const companyCommission = m.payment
+              ? Number((m.payment as any).companyCommission || (totalAmount - pilotEarnings))
+              : Math.round((totalAmount - pilotEarnings) * 100) / 100;
+            return {
+              ...costEst,
+              totalEstimatedCost: totalAmount,
+              pilotCommissionPercentage: pilotCommissionPct,
+              pilotEarnings,
+              companyCommission,
+            };
+          })(),
+          pilotCommissionPercentage: SystemSettingService.getCachedSettingsSync().pilotCommissionPercentage || 70,
           review: m.review
             ? {
                 reviewId: m.review.reviewId,
@@ -636,16 +673,52 @@ export class PilotService {
         mobile: farmerUser.mobile,
         address: field.farmer.address,
       },
-      payment: mission.payment
-        ? {
-            paymentId: mission.payment.paymentId,
-            totalAmount: Number(mission.payment.totalAmount),
-            pilotEarnings: Number(mission.payment.pilotEarnings),
-            paymentStatus: mission.payment.paymentStatus,
-            paymentMethod: mission.payment.paymentMethod,
-            payoutStatus: mission.payment.payoutStatus,
-          }
-        : null,
+            payment: (() => {
+        const dynamicSettings = SystemSettingService.getCachedSettingsSync();
+        const pilotCommissionPct = dynamicSettings.pilotCommissionPercentage || 70;
+        const totalAmount = mission.payment ? Number(mission.payment.totalAmount) : Number(sr.estimatedCost);
+        const pilotEarnings = mission.payment
+          ? Number(mission.payment.pilotEarnings)
+          : Math.round(totalAmount * (pilotCommissionPct / 100) * 100) / 100;
+        const companyCommission = mission.payment
+          ? Number((mission.payment as any).companyCommission || (totalAmount - pilotEarnings))
+          : Math.round((totalAmount - pilotEarnings) * 100) / 100;
+        return {
+          paymentId: mission.payment ? mission.payment.paymentId : 0,
+          totalAmount,
+          pilotEarnings,
+          companyCommission,
+          pilotCommissionPercentage: pilotCommissionPct,
+          paymentStatus: mission.payment ? mission.payment.paymentStatus : "PENDING",
+          paymentMethod: mission.payment ? mission.payment.paymentMethod : "CARD_GATEWAY",
+          payoutStatus: mission.payment ? mission.payment.payoutStatus : "UNSETTLED",
+        };
+      })(),
+      costBreakdown: (() => {
+        const dynamicSettings = SystemSettingService.getCachedSettingsSync();
+        const pilotCommissionPct = dynamicSettings.pilotCommissionPercentage || 70;
+        const costEst = CostEstimationService.calculateEstimatedCost({
+          area: Number(field.area),
+          cropType: field.cropType,
+          serviceType: sr.serviceType,
+          priority: sr.priority as any,
+        });
+        const totalAmount = mission.payment ? Number(mission.payment.totalAmount) : Number(sr.estimatedCost);
+        const pilotEarnings = mission.payment
+          ? Number(mission.payment.pilotEarnings)
+          : Math.round(totalAmount * (pilotCommissionPct / 100) * 100) / 100;
+        const companyCommission = mission.payment
+          ? Number((mission.payment as any).companyCommission || (totalAmount - pilotEarnings))
+          : Math.round((totalAmount - pilotEarnings) * 100) / 100;
+        return {
+          ...costEst,
+          totalEstimatedCost: totalAmount,
+          pilotCommissionPercentage: pilotCommissionPct,
+          pilotEarnings,
+          companyCommission,
+        };
+      })(),
+      pilotCommissionPercentage: SystemSettingService.getCachedSettingsSync().pilotCommissionPercentage || 70,
       review: mission.review
         ? {
             reviewId: mission.review.reviewId,

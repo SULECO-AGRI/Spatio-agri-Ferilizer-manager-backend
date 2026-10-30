@@ -1,4 +1,5 @@
 import { PaginationMeta } from "./common.types";
+import { CostEstimationBreakdown } from "./cost-estimation.types";
 
 export interface PilotQueryDTO {
   page?: number;
@@ -98,10 +99,14 @@ export interface PilotMissionItemDTO {
     paymentId: number;
     totalAmount: number;
     pilotEarnings: number;
+    companyCommission?: number;
+    pilotCommissionPercentage?: number;
     paymentStatus: string;
     paymentMethod: string;
     payoutStatus: string;
   } | null;
+  costBreakdown?: CostEstimationBreakdown | null;
+  pilotCommissionPercentage?: number;
   review: {
     reviewId: number;
     rating: number;
@@ -136,6 +141,12 @@ export interface PilotPayoutItemDTO {
   status: string;
   settledAt: Date | null;
   createdAt: Date;
+  requestCode?: string;
+  missionId?: number;
+  totalFarmerPayment?: number;
+  companyCommission?: number;
+  pilotCommissionPercentage?: number;
+  serviceType?: string;
 }
 
 export interface PilotReviewQueryDTO {
@@ -167,6 +178,8 @@ export interface PilotPayoutsResponseDTO {
     totalSettled: number;
     totalPending: number;
     totalProcessing: number;
+    completedFlights: number;
+    pilotCommissionPercentage?: number;
   };
   pagination: PaginationMeta;
 }

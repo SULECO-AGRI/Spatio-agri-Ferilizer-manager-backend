@@ -1054,8 +1054,10 @@ export class ServiceRequestService {
 
           if (!existingPayment) {
             const total = Number(serviceRequest.estimatedCost);
-            const commission = Math.round(total * 0.30 * 100) / 100;
-            const earnings = Math.round(total * 0.70 * 100) / 100;
+            const dynamicSettings = await SystemSettingService.getSettings();
+            const pilotPct = dynamicSettings.pilotCommissionPercentage || 70;
+            const earnings = Math.round(total * (pilotPct / 100) * 100) / 100;
+            const commission = Math.round((total - earnings) * 100) / 100;
             await tx.payment.create({
               data: {
                 missionId: assignedMission.missionId,

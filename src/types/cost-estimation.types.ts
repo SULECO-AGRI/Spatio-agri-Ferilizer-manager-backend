@@ -25,6 +25,8 @@ export interface CostEstimationBreakdown {
   baseRatePerAcre: number;
   baseRatePerHectare?: number;
   pilotCommissionPercentage?: number;
+  pilotEarnings?: number;
+  companyCommission?: number;
   cropMultiplier: number;
   areaDiscountPercent: number;
   areaDiscountAmount: number;
